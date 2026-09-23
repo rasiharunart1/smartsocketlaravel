@@ -2,10 +2,7 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Device;
 use App\Models\SensorLog;
-use App\Models\SocketChannel;
-use App\Models\TelemetryLog;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -15,8 +12,7 @@ class HistoryController extends Controller
 {
     public function index(Request $request): View
     {
-        $deviceUid = config('mqtt.default_device_uid', 'ESP32_SOCKET_01');
-        $device = Device::where('device_uid', $deviceUid)->first() ?? Device::first();
+        $device = $request->user()->devices()->firstOrFail();
 
         $socketFilter = $request->get('socket');
         $startDate = $request->get('start_date');
@@ -37,16 +33,16 @@ class HistoryController extends Controller
 
         // Latest environmental temperature & smoke for quick reference
         $latestLog = SensorLog::where('device_id', $device?->id)->latest('recorded_at')->first();
-        $currentTemp = $latestLog ? (float) $latestLog->temperature : 34.2;
-        $currentSmoke = $latestLog ? (float) $latestLog->smoke_ppm : 120;
+        $currentTemp = $latestLog ? (float) $latestLog->temperature : 0;
+        $currentSmoke = $latestLog ? (float) $latestLog->smoke_ppm : 0;
+        $threshold = $device->threshold;
 
-        return view('history', compact('logs', 'device', 'socketFilter', 'startDate', 'endDate', 'currentTemp', 'currentSmoke'));
+        return view('history', compact('logs', 'device', 'socketFilter', 'startDate', 'endDate', 'currentTemp', 'currentSmoke', 'threshold'));
     }
 
     public function export(Request $request): StreamedResponse
     {
-        $deviceUid = config('mqtt.default_device_uid', 'ESP32_SOCKET_01');
-        $device = Device::where('device_uid', $deviceUid)->first() ?? Device::first();
+        $device = $request->user()->devices()->firstOrFail();
 
         $startDate = $request->get('start_date');
         $endDate = $request->get('end_date');
@@ -62,7 +58,7 @@ class HistoryController extends Controller
             $query->where('recorded_at', '<=', Carbon::parse($endDate)->endOfDay());
         }
 
-        $fileName = 'smart_socket_unified_logs_' . date('Ymd_His') . '.csv';
+        $fileName = 'smart_socket_unified_logs_'.date('Ymd_His').'.csv';
 
         $headers = [
             'Content-Type' => 'text/csv',

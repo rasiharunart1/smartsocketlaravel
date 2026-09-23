@@ -22,6 +22,17 @@ class Device extends Model
         'wifi_rssi',
         'firmware_version',
         'last_seen_at',
+        'mqtt_host',
+        'mqtt_port',
+        'mqtt_tls',
+        'mqtt_username',
+        'mqtt_password',
+        'mqtt_client_id',
+    ];
+
+    protected $hidden = [
+        'mqtt_username',
+        'mqtt_password',
     ];
 
     protected function casts(): array
@@ -29,6 +40,10 @@ class Device extends Model
         return [
             'wifi_rssi' => 'integer',
             'last_seen_at' => 'datetime',
+            'mqtt_port' => 'integer',
+            'mqtt_tls' => 'boolean',
+            'mqtt_username' => 'encrypted',
+            'mqtt_password' => 'encrypted',
         ];
     }
 

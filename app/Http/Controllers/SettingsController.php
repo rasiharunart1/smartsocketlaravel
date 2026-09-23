@@ -2,9 +2,9 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\UpdateDeviceSettingsRequest;
+use App\Http\Requests\UpdateMqttSettingsRequest;
 use App\Models\ActivityLog;
-use App\Models\Device;
-use App\Models\DeviceThreshold;
 use App\Services\MqttService;
 use Exception;
 use Illuminate\Http\RedirectResponse;
@@ -20,40 +20,21 @@ class SettingsController extends Controller
         $this->mqttService = $mqttService;
     }
 
-    public function index(): View
+    public function index(Request $request): View
     {
-        $deviceUid = config('mqtt.default_device_uid', 'ESP32_SOCKET_01');
-        $device = Device::where('device_uid', $deviceUid)->first() ?? Device::first();
-
-        $threshold = DeviceThreshold::firstOrCreate(
-            ['device_id' => $device?->id],
-            [
-                'max_voltage' => 245.0,
-                'max_current' => 15.5,
-                'max_temperature' => 65.0,
-                'max_smoke_ppm' => 995.0,
-                'kwh_rate' => 1444.70,
-            ]
-        );
+        $device = $request->user()->devices()->with('threshold')->firstOrFail();
+        $threshold = $device->threshold;
 
         return view('settings', compact('device', 'threshold'));
     }
 
-    public function update(Request $request): RedirectResponse
+    public function update(UpdateDeviceSettingsRequest $request): RedirectResponse
     {
-        $validated = $request->validate([
-            'max_voltage' => 'required|numeric|min:150|max:300',
-            'max_current' => 'required|numeric|min:0.5|max:30',
-            'max_temperature' => 'required|numeric|min:30|max:120',
-            'max_smoke_ppm' => 'required|numeric|min:100|max:5000',
-            'kwh_rate' => 'required|numeric|min:0|max:100000',
-        ]);
+        $validated = $request->validated();
+        $device = $request->user()->devices()->firstOrFail();
 
-        $deviceUid = config('mqtt.default_device_uid', 'ESP32_SOCKET_01');
-        $device = Device::where('device_uid', $deviceUid)->firstOrFail();
-
-        $threshold = DeviceThreshold::updateOrCreate(
-            ['device_id' => $device->id],
+        $device->threshold()->updateOrCreate(
+            [],
             [
                 'max_voltage' => (float) $validated['max_voltage'],
                 'max_current' => (float) $validated['max_current'],
@@ -66,7 +47,7 @@ class SettingsController extends Controller
         // Publish to MQTT broker
         $mqttDelivered = false;
         try {
-            $mqttDelivered = $this->mqttService->publishThreshold($device->device_uid, [
+            $mqttDelivered = $this->mqttService->publishThreshold($device, [
                 'max_voltage' => (float) $validated['max_voltage'],
                 'max_current' => (float) $validated['max_current'],
                 'max_temperature' => (float) $validated['max_temperature'],
@@ -80,11 +61,38 @@ class SettingsController extends Controller
             'device_id' => $device->id,
             'event_type' => 'SETTING_UPDATE',
             'title' => 'Ambang Batas Diperbarui',
-            'description' => "Batas baru: {$validated['max_voltage']}V, {$validated['max_current']}A, {$validated['max_temperature']}°C, {$validated['max_smoke_ppm']}ppm, tarif Rp " . number_format((float) $validated['kwh_rate'], 2, ',', '.') . "/kWh" . ($mqttDelivered ? ' (Tersinkron ke broker MQTT)' : ''),
+            'description' => "Batas baru: {$validated['max_voltage']}V, {$validated['max_current']}A, {$validated['max_temperature']}°C, {$validated['max_smoke_ppm']}ppm, tarif Rp ".number_format((float) $validated['kwh_rate'], 2, ',', '.').'/kWh'.($mqttDelivered ? ' (Tersinkron ke broker MQTT)' : ''),
         ]);
 
-        $statusMsg = 'Ambang batas keamanan berhasil disimpan!' . ($mqttDelivered ? ' Pengaturan disinkronkan ke ESP32 via HiveMQ.' : '');
+        $statusMsg = 'Ambang batas keamanan berhasil disimpan!'.($mqttDelivered ? ' Pengaturan disinkronkan ke ESP32 via HiveMQ.' : '');
 
         return redirect()->route('settings')->with('status', $statusMsg);
+    }
+
+    public function updateMqtt(UpdateMqttSettingsRequest $request): RedirectResponse
+    {
+        $device = $request->user()->devices()->firstOrFail();
+        $mqttSettings = $request->safe()->only([
+            'mqtt_host',
+            'mqtt_port',
+            'mqtt_tls',
+            'mqtt_username',
+            'mqtt_client_id',
+        ]);
+
+        if ($request->filled('mqtt_password')) {
+            $mqttSettings['mqtt_password'] = $request->string('mqtt_password')->toString();
+        }
+
+        $device->update($mqttSettings);
+
+        ActivityLog::create([
+            'device_id' => $device->id,
+            'event_type' => 'MQTT_UPDATE',
+            'title' => 'Kredensial MQTT Diperbarui',
+            'description' => 'Konfigurasi koneksi MQTT perangkat diperbarui dari halaman Settings.',
+        ]);
+
+        return redirect()->route('settings')->with('status', 'Kredensial MQTT berhasil disimpan.');
     }
 }

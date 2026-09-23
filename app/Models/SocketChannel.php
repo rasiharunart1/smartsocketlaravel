@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class SocketChannel extends Model
 {
@@ -38,7 +39,7 @@ class SocketChannel extends Model
         return $this->hasMany(TelemetryLog::class);
     }
 
-    public function latestTelemetry()
+    public function latestTelemetry(): HasOne
     {
         return $this->hasOne(TelemetryLog::class)->latestOfMany('recorded_at');
     }

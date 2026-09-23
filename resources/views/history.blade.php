@@ -102,7 +102,13 @@
                 <tbody>
                     @forelse($logs as $log)
                         @php
-                            $isAlert = ($log->voltage_1 > 245 || $log->current_1 > 15 || $log->voltage_2 > 245 || $log->current_2 > 15 || $log->temperature > 65 || $log->smoke_ppm > 990);
+                            $socket1Alert = (($threshold?->max_voltage ?? 0) > 0 && $log->voltage_1 > $threshold->max_voltage)
+                                || (($threshold?->max_current ?? 0) > 0 && $log->current_1 > $threshold->max_current);
+                            $socket2Alert = (($threshold?->max_voltage ?? 0) > 0 && $log->voltage_2 > $threshold->max_voltage)
+                                || (($threshold?->max_current ?? 0) > 0 && $log->current_2 > $threshold->max_current);
+                            $temperatureAlert = ($threshold?->max_temperature ?? 0) > 0 && $log->temperature > $threshold->max_temperature;
+                            $smokeAlert = ($threshold?->max_smoke_ppm ?? 0) > 0 && $log->smoke_ppm > $threshold->max_smoke_ppm;
+                            $isAlert = $socket1Alert || $socket2Alert || $temperatureAlert || $smokeAlert;
                         @endphp
 
                         @if(request('socket') == '1')
@@ -117,8 +123,8 @@
                                 <td>{{ number_format($log->temperature, 1) }} °C</td>
                                 <td>{{ number_format($log->smoke_ppm, 0) }} ppm</td>
                                 <td>
-                                    <span class="status-badge" style="background: {{ ($log->voltage_1 > 245 || $log->current_1 > 15) ? '#fee2e2' : '#e6f7f4' }}; color: {{ ($log->voltage_1 > 245 || $log->current_1 > 15) ? '#dc2626' : '#0d685f' }};">
-                                        {{ ($log->voltage_1 > 245 || $log->current_1 > 15) ? 'OVERLOAD' : 'NORMAL' }}
+                                    <span class="status-badge" style="background: {{ $socket1Alert ? '#fee2e2' : '#e6f7f4' }}; color: {{ $socket1Alert ? '#dc2626' : '#0d685f' }};">
+                                        {{ $socket1Alert ? 'OVERLOAD' : 'NORMAL' }}
                                     </span>
                                 </td>
                             </tr>
@@ -134,8 +140,8 @@
                                 <td>{{ number_format($log->temperature, 1) }} °C</td>
                                 <td>{{ number_format($log->smoke_ppm, 0) }} ppm</td>
                                 <td>
-                                    <span class="status-badge" style="background: {{ ($log->voltage_2 > 245 || $log->current_2 > 15) ? '#fee2e2' : '#e6f7f4' }}; color: {{ ($log->voltage_2 > 245 || $log->current_2 > 15) ? '#dc2626' : '#0d685f' }};">
-                                        {{ ($log->voltage_2 > 245 || $log->current_2 > 15) ? 'OVERLOAD' : 'NORMAL' }}
+                                    <span class="status-badge" style="background: {{ $socket2Alert ? '#fee2e2' : '#e6f7f4' }}; color: {{ $socket2Alert ? '#dc2626' : '#0d685f' }};">
+                                        {{ $socket2Alert ? 'OVERLOAD' : 'NORMAL' }}
                                     </span>
                                 </td>
                             </tr>
@@ -157,12 +163,12 @@
                                 </td>
                                 <td>{{ number_format($log->energy_1 + $log->energy_2, 3) }} kWh</td>
                                 <td>
-                                    <span style="font-weight: 700; color: {{ $log->temperature > 65 ? '#dc2626' : '#15803d' }};">
+                                    <span style="font-weight: 700; color: {{ $temperatureAlert ? '#dc2626' : '#15803d' }};">
                                         {{ number_format($log->temperature, 1) }} °C
                                     </span>
                                 </td>
                                 <td>
-                                    <span style="font-weight: 700; color: {{ $log->smoke_ppm > 990 ? '#dc2626' : '#475569' }};">
+                                    <span style="font-weight: 700; color: {{ $smokeAlert ? '#dc2626' : '#475569' }};">
                                         {{ number_format($log->smoke_ppm, 0) }} ppm
                                     </span>
                                 </td>

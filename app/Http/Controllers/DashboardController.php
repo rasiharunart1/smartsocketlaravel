@@ -3,7 +3,6 @@
 namespace App\Http\Controllers;
 
 use App\Models\ActivityLog;
-use App\Models\Device;
 use App\Models\DeviceAlert;
 use App\Models\DeviceThreshold;
 use App\Models\EnvironmentalLog;
@@ -25,31 +24,17 @@ class DashboardController extends Controller
         $this->mqttService = $mqttService;
     }
 
-    public function index(): View
+    public function index(Request $request): View
     {
-        $deviceUid = config('mqtt.default_device_uid', 'ESP32_SOCKET_01');
-        $device = Device::firstOrCreate(
-            ['device_uid' => $deviceUid],
-            [
-                'name' => 'Smart Socket ESP32',
-                'status' => 'online',
-                'ip_address' => '192.168.1.144',
-                'mac_address' => '4E:A1:02:FF:88',
-                'wifi_rssi' => -42,
-                'firmware_version' => '2.1.4',
-                'last_seen_at' => now(),
-            ]
-        );
+        $device = $request->user()->devices()->firstOrFail();
 
-        $socket1 = SocketChannel::firstOrCreate(
+        $socket1 = SocketChannel::where(
             ['device_id' => $device->id, 'channel_number' => 1],
-            ['name' => 'Socket 1', 'pzem_identifier' => 'PZEM_01', 'is_active' => true, 'status' => 'normal']
-        );
+        )->firstOrFail();
 
-        $socket2 = SocketChannel::firstOrCreate(
+        $socket2 = SocketChannel::where(
             ['device_id' => $device->id, 'channel_number' => 2],
-            ['name' => 'Socket 2', 'pzem_identifier' => 'PZEM_02', 'is_active' => true, 'status' => 'normal']
-        );
+        )->firstOrFail();
 
         $socket1Telemetry = TelemetryLog::where('socket_channel_id', $socket1->id)
             ->latest('recorded_at')
@@ -108,17 +93,16 @@ class DashboardController extends Controller
             'state' => 'nullable|boolean',
         ]);
 
-        $deviceUid = config('mqtt.default_device_uid', 'ESP32_SOCKET_01');
-        $device = Device::where('device_uid', $deviceUid)->firstOrFail();
+        $device = $request->user()->devices()->firstOrFail();
 
         $socket = SocketChannel::where('device_id', $device->id)
             ->where('channel_number', $validated['socket_number'])
             ->firstOrFail();
 
-        $newState = isset($validated['state']) ? (bool) $validated['state'] : !$socket->is_active;
+        $newState = isset($validated['state']) ? (bool) $validated['state'] : ! $socket->is_active;
 
         try {
-            $published = $this->mqttService->publishSwitch($device->device_uid, $socket->channel_number, $newState);
+            $published = $this->mqttService->publishSwitch($device, $socket->channel_number, $newState);
         } catch (Exception $e) {
             $published = false;
         }
@@ -131,8 +115,8 @@ class DashboardController extends Controller
         ActivityLog::create([
             'device_id' => $device->id,
             'event_type' => 'SWITCH',
-            'title' => "Socket {$socket->channel_number} " . ($newState ? 'Dinyalakan' : 'Dimatikan'),
-            'description' => "Pengaktifan melalui web dashboard oleh " . (auth()->user()->name ?? 'User'),
+            'title' => "Socket {$socket->channel_number} ".($newState ? 'Dinyalakan' : 'Dimatikan'),
+            'description' => 'Pengaktifan melalui web dashboard oleh '.(auth()->user()->name ?? 'User'),
         ]);
 
         return response()->json([
@@ -140,17 +124,16 @@ class DashboardController extends Controller
             'is_active' => $newState,
             'status' => $socket->status,
             'mqtt_delivered' => $published,
-            'message' => "Socket {$socket->channel_number} berhasil " . ($newState ? 'dinyalakan' : 'dimatikan'),
+            'message' => "Socket {$socket->channel_number} berhasil ".($newState ? 'dinyalakan' : 'dimatikan'),
         ]);
     }
 
     public function reconnect(Request $request): JsonResponse
     {
-        $deviceUid = config('mqtt.default_device_uid', 'ESP32_SOCKET_01');
-        $device = Device::where('device_uid', $deviceUid)->firstOrFail();
+        $device = $request->user()->devices()->firstOrFail();
 
         try {
-            $published = $this->mqttService->publishReconnect($device->device_uid);
+            $published = $this->mqttService->publishReconnect($device);
         } catch (Exception $e) {
             $published = false;
         }
@@ -171,29 +154,15 @@ class DashboardController extends Controller
 
     public function telemetry(Request $request): JsonResponse
     {
-        $deviceUid = config('mqtt.default_device_uid', 'ESP32_SOCKET_01');
-        $device = Device::firstOrCreate(
-            ['device_uid' => $deviceUid],
-            [
-                'name' => 'Smart Socket ESP32',
-                'status' => 'online',
-                'ip_address' => '192.168.1.144',
-                'mac_address' => '4E:A1:02:FF:88',
-                'wifi_rssi' => -42,
-                'firmware_version' => '2.1.4',
-                'last_seen_at' => now(),
-            ]
-        );
+        $device = $request->user()->devices()->firstOrFail();
 
-        $socket1 = SocketChannel::firstOrCreate(
+        $socket1 = SocketChannel::where(
             ['device_id' => $device->id, 'channel_number' => 1],
-            ['name' => 'Socket 1', 'pzem_identifier' => 'PZEM_01', 'is_active' => true, 'status' => 'normal']
-        );
+        )->firstOrFail();
 
-        $socket2 = SocketChannel::firstOrCreate(
+        $socket2 = SocketChannel::where(
             ['device_id' => $device->id, 'channel_number' => 2],
-            ['name' => 'Socket 2', 'pzem_identifier' => 'PZEM_02', 'is_active' => true, 'status' => 'normal']
-        );
+        )->firstOrFail();
 
         $s1Tel = $socket1 ? TelemetryLog::where('socket_channel_id', $socket1->id)->latest('recorded_at')->first() : null;
         $s2Tel = $socket2 ? TelemetryLog::where('socket_channel_id', $socket2->id)->latest('recorded_at')->first() : null;
@@ -210,15 +179,15 @@ class DashboardController extends Controller
         $c1 = $sensorLog ? $sensorLog->current_1 : ($s1Tel ? (float) $s1Tel->current : 0);
         $p1 = $sensorLog ? $sensorLog->power_1 : ($s1Tel ? (float) $s1Tel->power : 0);
         $e1 = $sensorLog ? $sensorLog->energy_1 : ($s1Tel ? (float) $s1Tel->energy : 0);
-        $f1 = $sensorLog ? $sensorLog->frequency_1 : ($s1Tel ? (float) $s1Tel->frequency : 50.0);
-        $pf1 = $sensorLog ? $sensorLog->power_factor_1 : ($s1Tel ? (float) $s1Tel->power_factor : 1.0);
+        $f1 = $sensorLog ? $sensorLog->frequency_1 : ($s1Tel ? (float) $s1Tel->frequency : 0);
+        $pf1 = $sensorLog ? $sensorLog->power_factor_1 : ($s1Tel ? (float) $s1Tel->power_factor : 0);
 
         $v2 = $sensorLog ? $sensorLog->voltage_2 : ($s2Tel ? (float) $s2Tel->voltage : 0);
         $c2 = $sensorLog ? $sensorLog->current_2 : ($s2Tel ? (float) $s2Tel->current : 0);
         $p2 = $sensorLog ? $sensorLog->power_2 : ($s2Tel ? (float) $s2Tel->power : 0);
         $e2 = $sensorLog ? $sensorLog->energy_2 : ($s2Tel ? (float) $s2Tel->energy : 0);
-        $f2 = $sensorLog ? $sensorLog->frequency_2 : ($s2Tel ? (float) $s2Tel->frequency : 50.0);
-        $pf2 = $sensorLog ? $sensorLog->power_factor_2 : ($s2Tel ? (float) $s2Tel->power_factor : 1.0);
+        $f2 = $sensorLog ? $sensorLog->frequency_2 : ($s2Tel ? (float) $s2Tel->frequency : 0);
+        $pf2 = $sensorLog ? $sensorLog->power_factor_2 : ($s2Tel ? (float) $s2Tel->power_factor : 0);
 
         $temp = $sensorLog ? $sensorLog->temperature : ($env ? (float) $env->temperature : 0);
         $smoke = $sensorLog ? $sensorLog->smoke_ppm : ($env ? (float) $env->smoke_ppm : 0);
@@ -236,13 +205,13 @@ class DashboardController extends Controller
                 'ip_address' => $device->ip_address,
                 'mac_address' => $device->mac_address,
                 'firmware_version' => $device->firmware_version,
-                'last_seen' => $device->last_seen_at?->diffForHumans() ?? 'Baru saja',
+                'last_seen' => $device->last_seen_at?->diffForHumans() ?? 'Belum pernah',
             ],
             'socket_1' => [
                 'name' => $socket1?->name ?? 'Socket 1',
                 'pzem' => $socket1?->pzem_identifier ?? 'PZEM_01',
                 'is_active' => (bool) ($socket1?->is_active ?? false),
-                'status' => $socket1?->status ?? 'normal',
+                'status' => $socket1?->status ?? 'offline',
                 'voltage' => $v1,
                 'current' => $c1,
                 'power' => $p1,
@@ -254,7 +223,7 @@ class DashboardController extends Controller
                 'name' => $socket2?->name ?? 'Socket 2',
                 'pzem' => $socket2?->pzem_identifier ?? 'PZEM_02',
                 'is_active' => (bool) ($socket2?->is_active ?? false),
-                'status' => $socket2?->status ?? 'normal',
+                'status' => $socket2?->status ?? 'offline',
                 'voltage' => $v2,
                 'current' => $c2,
                 'power' => $p2,

@@ -11,24 +11,24 @@
         $c1 = $sensorLog ? (float) $sensorLog->current_1 : ($socket1Telemetry ? (float) $socket1Telemetry->current : 0);
         $p1 = $sensorLog ? (float) $sensorLog->power_1 : ($socket1Telemetry ? (float) $socket1Telemetry->power : 0);
         $e1 = $sensorLog ? (float) $sensorLog->energy_1 : ($socket1Telemetry ? (float) $socket1Telemetry->energy : 0);
-        $f1 = $sensorLog ? (float) $sensorLog->frequency_1 : ($socket1Telemetry ? (float) $socket1Telemetry->frequency : 50.0);
-        $pf1 = $sensorLog ? (float) $sensorLog->power_factor_1 : ($socket1Telemetry ? (float) $socket1Telemetry->power_factor : 1.0);
+        $f1 = $sensorLog ? (float) $sensorLog->frequency_1 : ($socket1Telemetry ? (float) $socket1Telemetry->frequency : 0);
+        $pf1 = $sensorLog ? (float) $sensorLog->power_factor_1 : ($socket1Telemetry ? (float) $socket1Telemetry->power_factor : 0);
 
         $v2 = $sensorLog ? (float) $sensorLog->voltage_2 : ($socket2Telemetry ? (float) $socket2Telemetry->voltage : 0);
         $c2 = $sensorLog ? (float) $sensorLog->current_2 : ($socket2Telemetry ? (float) $socket2Telemetry->current : 0);
         $p2 = $sensorLog ? (float) $sensorLog->power_2 : ($socket2Telemetry ? (float) $socket2Telemetry->power : 0);
         $e2 = $sensorLog ? (float) $sensorLog->energy_2 : ($socket2Telemetry ? (float) $socket2Telemetry->energy : 0);
-        $f2 = $sensorLog ? (float) $sensorLog->frequency_2 : ($socket2Telemetry ? (float) $socket2Telemetry->frequency : 50.0);
-        $pf2 = $sensorLog ? (float) $sensorLog->power_factor_2 : ($socket2Telemetry ? (float) $socket2Telemetry->power_factor : 1.0);
+        $f2 = $sensorLog ? (float) $sensorLog->frequency_2 : ($socket2Telemetry ? (float) $socket2Telemetry->frequency : 0);
+        $pf2 = $sensorLog ? (float) $sensorLog->power_factor_2 : ($socket2Telemetry ? (float) $socket2Telemetry->power_factor : 0);
 
         $temp = $sensorLog ? (float) $sensorLog->temperature : ($envLog ? (float) $envLog->temperature : 0);
         $smoke = $sensorLog ? (float) $sensorLog->smoke_ppm : ($envLog ? (float) $envLog->smoke_ppm : 0);
 
         $totalPower = round($p1 + $p2, 1);
         $totalEnergy = round($e1 + $e2, 3);
-        $maxTemp = $threshold->max_temperature ?? 65;
-        $maxSmoke = $threshold->max_smoke_ppm ?? 995;
-        $maxCurr = $threshold->max_current ?? 15.5;
+        $maxTemp = $threshold->max_temperature ?? 0;
+        $maxSmoke = $threshold->max_smoke_ppm ?? 0;
+        $maxCurr = $threshold->max_current ?? 0;
     @endphp
 
     <!-- Header Panel -->
@@ -64,12 +64,12 @@
             <div>
                 <div style="display: flex; justify-content: space-between; font-size: 10px; color: #7c8795; margin-top: 10px;">
                     <span>Batas Maks: {{ $maxTemp }} °C</span>
-                    <span id="status-temp" style="font-weight: 700; color: {{ $temp > $maxTemp ? '#dc2626' : '#15803d' }};">
-                        {{ $temp > $maxTemp ? 'Waspada' : 'Aman' }}
+                    <span id="status-temp" style="font-weight: 700; color: {{ $maxTemp > 0 && $temp > $maxTemp ? '#dc2626' : '#15803d' }};">
+                        {{ $maxTemp > 0 && $temp > $maxTemp ? 'Waspada' : 'Aman' }}
                     </span>
                 </div>
                 <div style="height: 5px; background: #e7edf7; margin-top: 6px; border-radius: 4px; overflow: hidden;">
-                    <span id="bar-temperature" style="display: block; width: {{ min(100, max(5, ($temp / max(1, $maxTemp)) * 100)) }}%; height: 100%; background: {{ $temp > $maxTemp ? '#dc2626' : '#123f80' }}; transition: width 0.3s ease;"></span>
+                    <span id="bar-temperature" style="display: block; width: {{ min(100, max(5, ($temp / max(1, $maxTemp)) * 100)) }}%; height: 100%; background: {{ $maxTemp > 0 && $temp > $maxTemp ? '#dc2626' : '#123f80' }}; transition: width 0.3s ease;"></span>
                 </div>
             </div>
         </div>
@@ -90,12 +90,12 @@
             <div>
                 <div style="display: flex; justify-content: space-between; font-size: 10px; color: #7c8795; margin-top: 10px;">
                     <span>Ambang: {{ $maxSmoke }} ppm</span>
-                    <span id="status-smoke" style="font-weight: 700; color: {{ $smoke > $maxSmoke ? '#dc2626' : '#15803d' }};">
-                        {{ $smoke > $maxSmoke ? 'Bahaya Asap' : 'Bersih' }}
+                    <span id="status-smoke" style="font-weight: 700; color: {{ $maxSmoke > 0 && $smoke > $maxSmoke ? '#dc2626' : '#15803d' }};">
+                        {{ $maxSmoke > 0 && $smoke > $maxSmoke ? 'Bahaya Asap' : 'Bersih' }}
                     </span>
                 </div>
                 <div style="height: 5px; background: #e7edf7; margin-top: 6px; border-radius: 4px; overflow: hidden;">
-                    <span id="bar-smoke" style="display: block; width: {{ min(100, max(5, ($smoke / max(1, $maxSmoke)) * 100)) }}%; height: 100%; background: {{ $smoke > $maxSmoke ? '#dc2626' : '#d97706' }}; transition: width 0.3s ease;"></span>
+                    <span id="bar-smoke" style="display: block; width: {{ min(100, max(5, ($smoke / max(1, $maxSmoke)) * 100)) }}%; height: 100%; background: {{ $maxSmoke > 0 && $smoke > $maxSmoke ? '#dc2626' : '#d97706' }}; transition: width 0.3s ease;"></span>
                 </div>
             </div>
         </div>
@@ -164,9 +164,9 @@
                     <strong style="font-size: 20px; color: #0f243d; display: block; margin-top: 4px;" id="socket-name-1">{{ $socket1->name ?? 'Socket 1' }}</strong>
                     
                     <div style="display: flex; align-items: center; gap: 12px; margin-top: 6px;">
-                        <div id="socket-1-status-indicator" style="font-size: 11.5px; font-weight: 700; color: {{ ($socket1->is_active ?? true) ? '#147f76' : '#8a96a7' }}; display: inline-flex; align-items: center; gap: 5px;">
-                            <span style="width: 8px; height: 8px; border-radius: 50%; background: {{ ($socket1->is_active ?? true) ? '#147f76' : '#8a96a7' }}; display: inline-block;"></span>
-                            <span id="socket-1-status-text">{{ ($socket1->is_active ?? true) ? 'Online (ON)' : 'Offline (OFF)' }}</span>
+                        <div id="socket-1-status-indicator" style="font-size: 11.5px; font-weight: 700; color: {{ ($socket1->is_active ?? false) ? '#147f76' : '#8a96a7' }}; display: inline-flex; align-items: center; gap: 5px;">
+                            <span style="width: 8px; height: 8px; border-radius: 50%; background: {{ ($socket1->is_active ?? false) ? '#147f76' : '#8a96a7' }}; display: inline-block;"></span>
+                            <span id="socket-1-status-text">{{ ($socket1->is_active ?? false) ? 'Online (ON)' : 'Offline (OFF)' }}</span>
                         </div>
                         <span id="socket-1-condition" style="font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 6px; background: {{ ($socket1->status == 'cutoff') ? '#fee2e2' : '#f0fdf4' }}; color: {{ ($socket1->status == 'cutoff') ? '#dc2626' : '#166534' }};">
                             Relay: {{ ucfirst($socket1->status ?? 'Normal') }}
@@ -177,8 +177,8 @@
                 <!-- Toggle Switch 1 -->
                 <div style="text-align: right;">
                     <div style="font-size: 10px; font-weight: 700; color: #64748b; margin-bottom: 6px;">SAKLAR RELAY 1</div>
-                    <button type="button" onclick="toggleSocket(1)" id="socket-btn-1" style="border: none; cursor: pointer; outline: none; padding: 0; width: 54px; height: 30px; background: {{ ($socket1->is_active ?? true) ? '#159b91' : '#cbd5e1' }}; border-radius: 20px; position: relative; transition: background 0.3s ease; flex-shrink: 0;" aria-label="Toggle Socket 1">
-                        <span id="socket-thumb-1" style="position: absolute; {{ ($socket1->is_active ?? true) ? 'right: 4px;' : 'left: 4px;' }} top: 4px; width: 22px; height: 22px; background: #fff; border-radius: 50%; box-shadow: 0 1px 3px rgba(0,0,0,0.2); transition: all 0.3s ease;"></span>
+                    <button type="button" onclick="toggleSocket(1)" id="socket-btn-1" style="border: none; cursor: pointer; outline: none; padding: 0; width: 54px; height: 30px; background: {{ ($socket1->is_active ?? false) ? '#159b91' : '#cbd5e1' }}; border-radius: 20px; position: relative; transition: background 0.3s ease; flex-shrink: 0;" aria-label="Toggle Socket 1">
+                        <span id="socket-thumb-1" style="position: absolute; {{ ($socket1->is_active ?? false) ? 'right: 4px;' : 'left: 4px;' }} top: 4px; width: 22px; height: 22px; background: #fff; border-radius: 50%; box-shadow: 0 1px 3px rgba(0,0,0,0.2); transition: all 0.3s ease;"></span>
                     </button>
                 </div>
             </div>
@@ -214,7 +214,7 @@
                     <div>
                         <div class="metric-subcard-sub">Maks: {{ $maxCurr }} A</div>
                         <div style="height: 4px; background: #e2e8f0; margin-top: 6px; border-radius: 3px; overflow: hidden;">
-                            <span id="bar-c1" style="display: block; width: {{ min(100, max(0, ($c1 / max(1, $maxCurr)) * 100)) }}%; height: 100%; background: {{ $c1 > $maxCurr ? '#dc2626' : '#123f80' }}; transition: width 0.3s ease;"></span>
+                            <span id="bar-c1" style="display: block; width: {{ min(100, max(0, ($c1 / max(1, $maxCurr)) * 100)) }}%; height: 100%; background: {{ $maxCurr > 0 && $c1 > $maxCurr ? '#dc2626' : '#123f80' }}; transition: width 0.3s ease;"></span>
                         </div>
                     </div>
                 </div>
@@ -301,9 +301,9 @@
                     <strong style="font-size: 20px; color: #0f243d; display: block; margin-top: 4px;" id="socket-name-2">{{ $socket2->name ?? 'Socket 2' }}</strong>
                     
                     <div style="display: flex; align-items: center; gap: 12px; margin-top: 6px;">
-                        <div id="socket-2-status-indicator" style="font-size: 11.5px; font-weight: 700; color: {{ ($socket2->is_active ?? true) ? '#147f76' : '#8a96a7' }}; display: inline-flex; align-items: center; gap: 5px;">
-                            <span style="width: 8px; height: 8px; border-radius: 50%; background: {{ ($socket2->is_active ?? true) ? '#147f76' : '#8a96a7' }}; display: inline-block;"></span>
-                            <span id="socket-2-status-text">{{ ($socket2->is_active ?? true) ? 'Online (ON)' : 'Offline (OFF)' }}</span>
+                        <div id="socket-2-status-indicator" style="font-size: 11.5px; font-weight: 700; color: {{ ($socket2->is_active ?? false) ? '#147f76' : '#8a96a7' }}; display: inline-flex; align-items: center; gap: 5px;">
+                            <span style="width: 8px; height: 8px; border-radius: 50%; background: {{ ($socket2->is_active ?? false) ? '#147f76' : '#8a96a7' }}; display: inline-block;"></span>
+                            <span id="socket-2-status-text">{{ ($socket2->is_active ?? false) ? 'Online (ON)' : 'Offline (OFF)' }}</span>
                         </div>
                         <span id="socket-2-condition" style="font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 6px; background: {{ ($socket2->status == 'cutoff') ? '#fee2e2' : '#f0fdf4' }}; color: {{ ($socket2->status == 'cutoff') ? '#dc2626' : '#166534' }};">
                             Relay: {{ ucfirst($socket2->status ?? 'Normal') }}
@@ -314,8 +314,8 @@
                 <!-- Toggle Switch 2 -->
                 <div style="text-align: right;">
                     <div style="font-size: 10px; font-weight: 700; color: #64748b; margin-bottom: 6px;">SAKLAR RELAY 2</div>
-                    <button type="button" onclick="toggleSocket(2)" id="socket-btn-2" style="border: none; cursor: pointer; outline: none; padding: 0; width: 54px; height: 30px; background: {{ ($socket2->is_active ?? true) ? '#159b91' : '#cbd5e1' }}; border-radius: 20px; position: relative; transition: background 0.3s ease; flex-shrink: 0;" aria-label="Toggle Socket 2">
-                        <span id="socket-thumb-2" style="position: absolute; {{ ($socket2->is_active ?? true) ? 'right: 4px;' : 'left: 4px;' }} top: 4px; width: 22px; height: 22px; background: #fff; border-radius: 50%; box-shadow: 0 1px 3px rgba(0,0,0,0.2); transition: all 0.3s ease;"></span>
+                    <button type="button" onclick="toggleSocket(2)" id="socket-btn-2" style="border: none; cursor: pointer; outline: none; padding: 0; width: 54px; height: 30px; background: {{ ($socket2->is_active ?? false) ? '#159b91' : '#cbd5e1' }}; border-radius: 20px; position: relative; transition: background 0.3s ease; flex-shrink: 0;" aria-label="Toggle Socket 2">
+                        <span id="socket-thumb-2" style="position: absolute; {{ ($socket2->is_active ?? false) ? 'right: 4px;' : 'left: 4px;' }} top: 4px; width: 22px; height: 22px; background: #fff; border-radius: 50%; box-shadow: 0 1px 3px rgba(0,0,0,0.2); transition: all 0.3s ease;"></span>
                     </button>
                 </div>
             </div>
@@ -351,7 +351,7 @@
                     <div>
                         <div class="metric-subcard-sub">Maks: {{ $maxCurr }} A</div>
                         <div style="height: 4px; background: #e2e8f0; margin-top: 6px; border-radius: 3px; overflow: hidden;">
-                            <span id="bar-c2" style="display: block; width: {{ min(100, max(0, ($c2 / max(1, $maxCurr)) * 100)) }}%; height: 100%; background: {{ $c2 > $maxCurr ? '#dc2626' : '#123f80' }}; transition: width 0.3s ease;"></span>
+                            <span id="bar-c2" style="display: block; width: {{ min(100, max(0, ($c2 / max(1, $maxCurr)) * 100)) }}%; height: 100%; background: {{ $maxCurr > 0 && $c2 > $maxCurr ? '#dc2626' : '#123f80' }}; transition: width 0.3s ease;"></span>
                         </div>
                     </div>
                 </div>
@@ -469,8 +469,8 @@
         <div class="panel" style="padding: 20px; background: #f8fafc; border-color: #dce3ef;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
                 <h2 style="font-size: 15px; font-weight: 800; margin: 0; color: #0f243d;">Diagnostik Perangkat</h2>
-                <span id="diag-status-pill" style="font-size: 10px; font-weight: 800; padding: 3px 8px; border-radius: 10px; background: {{ ($device->status ?? 'online') === 'online' ? '#e3f8f5' : '#fee2e2' }}; color: {{ ($device->status ?? 'online') === 'online' ? '#16897f' : '#dc2626' }};">
-                    {{ strtoupper($device->status ?? 'ONLINE') }}
+                <span id="diag-status-pill" style="font-size: 10px; font-weight: 800; padding: 3px 8px; border-radius: 10px; background: {{ ($device->status ?? 'offline') === 'online' ? '#e3f8f5' : '#fee2e2' }}; color: {{ ($device->status ?? 'offline') === 'online' ? '#16897f' : '#dc2626' }};">
+                    {{ strtoupper($device->status ?? 'OFFLINE') }}
                 </span>
             </div>
 
@@ -508,11 +508,11 @@
                 </div>
                 <div style="display: flex; justify-content: space-between;">
                     <span style="color: #64748b;">Firmware</span>
-                    <b id="diag-fw" style="color: #1e293b;">v{{ $device->firmware_version ?? '2.1.4' }}</b>
+                    <b id="diag-fw" style="color: #1e293b;">{{ $device->firmware_version ? 'v'.$device->firmware_version : 'Belum tersedia' }}</b>
                 </div>
                 <div style="display: flex; justify-content: space-between;">
                     <span style="color: #64748b;">Terakhir Terlihat</span>
-                    <b id="diag-last-seen" style="color: #1e293b;">{{ $device->last_seen_at?->diffForHumans() ?? 'Baru saja' }}</b>
+                    <b id="diag-last-seen" style="color: #1e293b;">{{ $device->last_seen_at?->diffForHumans() ?? 'Belum pernah' }}</b>
                 </div>
             </div>
 
@@ -561,7 +561,7 @@
         });
     }
 
-    function applySocketState(socketNum, isActive, status = 'normal') {
+    function applySocketState(socketNum, isActive, status = 'offline') {
         const btn = document.getElementById(`socket-btn-${socketNum}`);
         const thumb = document.getElementById(`socket-thumb-${socketNum}`);
         const indicator = document.getElementById(`socket-${socketNum}-status-indicator`);
@@ -640,7 +640,7 @@
         if (cBar && s.current !== undefined) {
             const cPct = Math.min(100, Math.max(0, (s.current / Math.max(1, MAX_CURRENT)) * 100));
             cBar.style.width = cPct + '%';
-            cBar.style.background = s.current > MAX_CURRENT ? '#dc2626' : '#123f80';
+            cBar.style.background = MAX_CURRENT > 0 && s.current > MAX_CURRENT ? '#dc2626' : '#123f80';
         }
 
         // Power
@@ -669,7 +669,7 @@
 
         // Apply switch & condition
         if (s.is_active !== undefined) {
-            applySocketState(num, s.is_active, s.status || 'normal');
+            applySocketState(num, s.is_active, s.status || 'offline');
         }
     }
 
@@ -704,11 +704,11 @@
                         if (dtEl) dtEl.textContent = tText + ' °C';
                         if (tBar) {
                             tBar.style.width = Math.min(100, Math.max(5, (tempVal / Math.max(1, MAX_TEMP)) * 100)) + '%';
-                            tBar.style.background = tempVal > MAX_TEMP ? '#dc2626' : '#123f80';
+                            tBar.style.background = MAX_TEMP > 0 && tempVal > MAX_TEMP ? '#dc2626' : '#123f80';
                         }
                         if (tStatus) {
-                            tStatus.textContent = tempVal > MAX_TEMP ? 'Waspada' : 'Aman';
-                            tStatus.style.color = tempVal > MAX_TEMP ? '#dc2626' : '#15803d';
+                            tStatus.textContent = MAX_TEMP > 0 && tempVal > MAX_TEMP ? 'Waspada' : 'Aman';
+                            tStatus.style.color = MAX_TEMP > 0 && tempVal > MAX_TEMP ? '#dc2626' : '#15803d';
                         }
                     }
 
@@ -724,11 +724,11 @@
                         if (dsEl) dsEl.textContent = sText + ' ppm';
                         if (sBar) {
                             sBar.style.width = Math.min(100, Math.max(5, (smokeVal / Math.max(1, MAX_SMOKE)) * 100)) + '%';
-                            sBar.style.background = smokeVal > MAX_SMOKE ? '#dc2626' : '#d97706';
+                            sBar.style.background = MAX_SMOKE > 0 && smokeVal > MAX_SMOKE ? '#dc2626' : '#d97706';
                         }
                         if (sStatus) {
-                            sStatus.textContent = smokeVal > MAX_SMOKE ? 'Bahaya Asap' : 'Bersih';
-                            sStatus.style.color = smokeVal > MAX_SMOKE ? '#dc2626' : '#15803d';
+                            sStatus.textContent = MAX_SMOKE > 0 && smokeVal > MAX_SMOKE ? 'Bahaya Asap' : 'Bersih';
+                            sStatus.style.color = MAX_SMOKE > 0 && smokeVal > MAX_SMOKE ? '#dc2626' : '#15803d';
                         }
                     }
                 }
@@ -783,4 +783,3 @@
     }, 3000);
 </script>
 @endpush
-

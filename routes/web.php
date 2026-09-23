@@ -29,6 +29,7 @@ Route::middleware(['auth'])->group(function () {
     // Settings
     Route::get('/settings', [SettingsController::class, 'index'])->name('settings');
     Route::post('/settings', [SettingsController::class, 'update'])->name('settings.update');
+    Route::put('/settings/mqtt', [SettingsController::class, 'updateMqtt'])->name('settings.mqtt.update');
 
     // About
     Route::get('/about', [AboutController::class, 'index'])->name('about');
@@ -40,4 +41,3 @@ Route::middleware(['auth'])->group(function () {
 });
 
 require __DIR__.'/auth.php';
-

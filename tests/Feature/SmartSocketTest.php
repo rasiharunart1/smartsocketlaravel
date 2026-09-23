@@ -2,9 +2,7 @@
 
 namespace Tests\Feature;
 
-use App\Models\Device;
-use App\Models\DeviceThreshold;
-use App\Models\SocketChannel;
+use App\Actions\CreateUserDevice;
 use App\Models\User;
 use App\Services\MqttService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -27,6 +25,14 @@ class SmartSocketTest extends TestCase
         $this->app->instance(MqttService::class, $mockMqtt);
     }
 
+    private function createUserWithDevice(): User
+    {
+        $user = User::factory()->create();
+        app(CreateUserDevice::class)->handle($user);
+
+        return $user;
+    }
+
     public function test_guest_is_redirected_to_login(): void
     {
         $response = $this->get('/');
@@ -38,7 +44,7 @@ class SmartSocketTest extends TestCase
 
     public function test_user_can_access_dashboard_and_views(): void
     {
-        $user = User::factory()->create();
+        $user = $this->createUserWithDevice();
 
         $this->actingAs($user)->get('/dashboard')->assertStatus(200);
         $this->actingAs($user)->get('/analytics')->assertStatus(200);
@@ -49,12 +55,9 @@ class SmartSocketTest extends TestCase
 
     public function test_socket_toggle_endpoint(): void
     {
-        $user = User::factory()->create();
-        $device = Device::firstOrCreate(['device_uid' => 'ESP32_SOCKET_01'], ['name' => 'ESP32']);
-        $socket = SocketChannel::firstOrCreate(
-            ['device_id' => $device->id, 'channel_number' => 1],
-            ['name' => 'Socket 1', 'pzem_identifier' => 'PZEM_01', 'is_active' => true]
-        );
+        $user = $this->createUserWithDevice();
+        $device = $user->devices()->firstOrFail();
+        $socket = $device->socketChannels()->where('channel_number', 1)->firstOrFail();
 
         $response = $this->actingAs($user)->postJson('/api/socket/toggle', [
             'socket_number' => 1,
@@ -75,11 +78,35 @@ class SmartSocketTest extends TestCase
 
     public function test_telemetry_polling_endpoint(): void
     {
-        $user = User::factory()->create();
+        $user = $this->createUserWithDevice();
 
         $response = $this->actingAs($user)->getJson('/api/device/telemetry');
 
         $response->assertStatus(200)
+            ->assertJson([
+                'device' => ['status' => 'offline', 'wifi_rssi' => 0],
+                'socket_1' => [
+                    'is_active' => false,
+                    'voltage' => 0,
+                    'current' => 0,
+                    'power' => 0,
+                    'energy' => 0,
+                    'frequency' => 0,
+                    'power_factor' => 0,
+                ],
+                'socket_2' => [
+                    'is_active' => false,
+                    'voltage' => 0,
+                    'current' => 0,
+                    'power' => 0,
+                    'energy' => 0,
+                    'frequency' => 0,
+                    'power_factor' => 0,
+                ],
+                'environmental' => ['temperature' => 0, 'smoke_ppm' => 0],
+                'total_power' => 0,
+                'total_energy' => 0,
+            ])
             ->assertJsonStructure([
                 'device' => ['status', 'wifi_rssi', 'ip_address', 'mac_address'],
                 'socket_1' => ['is_active', 'voltage', 'current', 'power', 'energy'],
@@ -90,14 +117,15 @@ class SmartSocketTest extends TestCase
 
     public function test_settings_update(): void
     {
-        $user = User::factory()->create();
-        $device = Device::firstOrCreate(['device_uid' => 'ESP32_SOCKET_01'], ['name' => 'ESP32']);
+        $user = $this->createUserWithDevice();
+        $device = $user->devices()->firstOrFail();
 
         $response = $this->actingAs($user)->post('/settings', [
             'max_voltage' => 248.0,
             'max_current' => 16.0,
             'max_temperature' => 70.0,
             'max_smoke_ppm' => 950.0,
+            'kwh_rate' => 1444.70,
         ]);
 
         $response->assertRedirect(route('settings'));
@@ -113,11 +141,52 @@ class SmartSocketTest extends TestCase
 
     public function test_history_csv_export(): void
     {
-        $user = User::factory()->create();
+        $user = $this->createUserWithDevice();
 
         $response = $this->actingAs($user)->get('/history/export');
 
         $response->assertStatus(200);
         $this->assertTrue(str_contains($response->headers->get('content-type') ?? '', 'text/csv'));
+    }
+
+    public function test_user_can_update_own_mqtt_credentials(): void
+    {
+        $user = $this->createUserWithDevice();
+        $device = $user->devices()->firstOrFail();
+
+        $response = $this->actingAs($user)->put('/settings/mqtt', [
+            'mqtt_host' => 'broker.example.com',
+            'mqtt_port' => 8883,
+            'mqtt_tls' => true,
+            'mqtt_username' => 'mqtt-user',
+            'mqtt_password' => 'super-secret',
+            'mqtt_client_id' => 'smart-socket-client',
+        ]);
+
+        $response->assertRedirect(route('settings'));
+
+        $device->refresh();
+        $this->assertSame('broker.example.com', $device->mqtt_host);
+        $this->assertSame(8883, $device->mqtt_port);
+        $this->assertTrue($device->mqtt_tls);
+        $this->assertSame('mqtt-user', $device->mqtt_username);
+        $this->assertSame('super-secret', $device->mqtt_password);
+        $this->assertNotSame('super-secret', $device->getRawOriginal('mqtt_password'));
+    }
+
+    public function test_user_cannot_read_or_control_another_users_device(): void
+    {
+        $firstUser = $this->createUserWithDevice();
+        $secondUser = $this->createUserWithDevice();
+        $firstDevice = $firstUser->devices()->firstOrFail();
+        $secondSocket = $secondUser->devices()->firstOrFail()->socketChannels()->where('channel_number', 1)->firstOrFail();
+
+        $this->actingAs($firstUser)->postJson('/api/socket/toggle', [
+            'socket_number' => 1,
+            'state' => true,
+        ])->assertOk();
+
+        $this->assertTrue($firstDevice->socketChannels()->where('channel_number', 1)->firstOrFail()->fresh()->is_active);
+        $this->assertFalse($secondSocket->fresh()->is_active);
     }
 }

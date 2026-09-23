@@ -24,7 +24,7 @@ class MqttListenCommand extends Command
      *
      * @var string
      */
-    protected $signature = 'mqtt:listen';
+    protected $signature = 'mqtt:listen {--device= : Device UID whose stored MQTT credentials should be used}';
 
     /**
      * The console command description.
@@ -39,38 +39,50 @@ class MqttListenCommand extends Command
     public function handle(MqttService $mqttService): int
     {
         $this->info('Starting Smart Socket MQTT Daemon...');
-        $clientId = config('mqtt.client_id', 'laravel_backend_daemon') . '_sub_' . uniqid();
+        $device = $this->option('device')
+            ? Device::where('device_uid', $this->option('device'))->firstOrFail()
+            : null;
+        $clientId = ($device?->mqtt_client_id ?: config('mqtt.client_id', 'laravel_backend_daemon')).'_sub_'.uniqid();
+        $topicDevice = $device?->device_uid ?? '+';
+        $host = $device?->mqtt_host ?: config('mqtt.host');
+        $port = $device?->mqtt_port ?: config('mqtt.port');
 
         while (true) {
             try {
-                $client = $mqttService->getClient($clientId);
-                $settings = $mqttService->getConnectionSettings();
+                if ($device && (! $device->mqtt_host || ! $device->mqtt_port)) {
+                    $this->error('MQTT credentials for this device are not configured.');
 
-                $this->info("Connecting to HiveMQ at " . config('mqtt.host') . ":" . config('mqtt.port') . "...");
+                    return self::FAILURE;
+                }
+
+                $client = $mqttService->getClient($clientId, $device);
+                $settings = $mqttService->getConnectionSettings($device);
+
+                $this->info("Connecting to MQTT broker at {$host}:{$port}...");
                 $client->connect($settings, true);
-                $this->info("Connected successfully. Subscribing to topics...");
+                $this->info('Connected successfully. Subscribing to topics...');
 
                 // Subscribe to telemetry
-                $client->subscribe('smartsocket/+/telemetry', function (string $topic, string $message) {
+                $client->subscribe("smartsocket/{$topicDevice}/telemetry", function (string $topic, string $message) {
                     $this->handleTelemetry($topic, $message);
                 }, 0);
 
                 // Subscribe to status (LWT)
-                $client->subscribe('smartsocket/+/status', function (string $topic, string $message) {
+                $client->subscribe("smartsocket/{$topicDevice}/status", function (string $topic, string $message) {
                     $this->handleStatus($topic, $message);
                 }, 1);
 
                 // Subscribe to emergency alert
-                $client->subscribe('smartsocket/+/alert', function (string $topic, string $message) {
+                $client->subscribe("smartsocket/{$topicDevice}/alert", function (string $topic, string $message) {
                     $this->handleAlert($topic, $message);
                 }, 1);
 
-                $this->info("Listening for messages... Press Ctrl+C to exit.");
+                $this->info('Listening for messages... Press Ctrl+C to exit.');
                 $client->loop(true);
             } catch (Exception $e) {
-                $this->error("MQTT Worker Exception: " . $e->getMessage());
-                Log::warning("MQTT Worker error: " . $e->getMessage());
-                $this->warn("Reconnecting in 5 seconds...");
+                $this->error('MQTT Worker Exception: '.$e->getMessage());
+                Log::warning('MQTT Worker error: '.$e->getMessage());
+                $this->warn('Reconnecting in 5 seconds...');
                 sleep(5);
             }
         }
@@ -81,6 +93,7 @@ class MqttListenCommand extends Command
     protected function extractDeviceUid(string $topic): ?string
     {
         $parts = explode('/', $topic);
+
         return $parts[1] ?? null;
     }
 
@@ -88,21 +101,19 @@ class MqttListenCommand extends Command
     {
         try {
             $data = json_decode($message, true);
-            if (!is_array($data)) {
+            if (! is_array($data)) {
                 Log::warning("Invalid JSON received on [{$topic}]: {$message}");
+
                 return;
             }
 
             $deviceUid = $data['device_id'] ?? $this->extractDeviceUid($topic);
-            if (!$deviceUid) {
+            if (! $deviceUid) {
                 return;
             }
 
             DB::transaction(function () use ($deviceUid, $data) {
-                $device = Device::firstOrCreate(
-                    ['device_uid' => $deviceUid],
-                    ['name' => 'Smart Socket ' . $deviceUid, 'status' => 'online']
-                );
+                $device = Device::where('device_uid', $deviceUid)->firstOrFail();
 
                 $device->update([
                     'status' => 'online',
@@ -123,8 +134,8 @@ class MqttListenCommand extends Command
                 $c1 = (float) ($s1['current'] ?? $data['current_1'] ?? 0);
                 $p1 = (float) ($s1['power'] ?? $data['power_1'] ?? 0);
                 $e1 = (float) ($s1['energy'] ?? $data['energy_1'] ?? 0);
-                $f1 = (float) ($s1['frequency'] ?? $data['frequency_1'] ?? 50.0);
-                $pf1 = isset($s1['power_factor']) ? (float) $s1['power_factor'] : (isset($data['power_factor_1']) ? (float) $data['power_factor_1'] : 1.0);
+                $f1 = (float) ($s1['frequency'] ?? $data['frequency_1'] ?? 0);
+                $pf1 = isset($s1['power_factor']) ? (float) $s1['power_factor'] : (isset($data['power_factor_1']) ? (float) $data['power_factor_1'] : 0);
 
                 // 3. Parse Socket 2 PZEM metrics
                 $s2 = $data['sockets']['socket_2'] ?? $data['socket_2'] ?? $data;
@@ -132,13 +143,13 @@ class MqttListenCommand extends Command
                 $c2 = (float) ($s2['current'] ?? $data['current_2'] ?? 0);
                 $p2 = (float) ($s2['power'] ?? $data['power_2'] ?? 0);
                 $e2 = (float) ($s2['energy'] ?? $data['energy_2'] ?? 0);
-                $f2 = (float) ($s2['frequency'] ?? $data['frequency_2'] ?? 50.0);
-                $pf2 = isset($s2['power_factor']) ? (float) $s2['power_factor'] : (isset($data['power_factor_2']) ? (float) $data['power_factor_2'] : 1.0);
+                $f2 = (float) ($s2['frequency'] ?? $data['frequency_2'] ?? 0);
+                $pf2 = isset($s2['power_factor']) ? (float) $s2['power_factor'] : (isset($data['power_factor_2']) ? (float) $data['power_factor_2'] : 0);
 
                 // 4. Update Socket Channel Relay States
                 $channel1 = SocketChannel::firstOrCreate(
                     ['device_id' => $device->id, 'channel_number' => 1],
-                    ['name' => 'Socket 1', 'pzem_identifier' => 'PZEM_01', 'is_active' => true, 'status' => 'normal']
+                    ['name' => 'Socket 1', 'pzem_identifier' => 'PZEM_01', 'is_active' => false, 'status' => 'offline']
                 );
                 if (isset($s1['relay_state'])) {
                     $channel1->update([
@@ -148,7 +159,7 @@ class MqttListenCommand extends Command
 
                 $channel2 = SocketChannel::firstOrCreate(
                     ['device_id' => $device->id, 'channel_number' => 2],
-                    ['name' => 'Socket 2', 'pzem_identifier' => 'PZEM_02', 'is_active' => true, 'status' => 'normal']
+                    ['name' => 'Socket 2', 'pzem_identifier' => 'PZEM_02', 'is_active' => false, 'status' => 'offline']
                 );
                 if (isset($s2['relay_state'])) {
                     $channel2->update([
@@ -207,10 +218,7 @@ class MqttListenCommand extends Command
                 ]);
 
                 // 6. Check Safety Thresholds & Trigger Alerts
-                $threshold = DeviceThreshold::firstOrCreate(
-                    ['device_id' => $device->id],
-                    ['max_voltage' => 245.0, 'max_current' => 15.5, 'max_temperature' => 65.0, 'max_smoke_ppm' => 995.0]
-                );
+                $threshold = DeviceThreshold::firstOrCreate(['device_id' => $device->id]);
 
                 if ($threshold->max_temperature > 0 && $temp >= $threshold->max_temperature) {
                     DeviceAlert::create([
@@ -257,7 +265,7 @@ class MqttListenCommand extends Command
 
             $this->line("<info>[Telemetry]</info> Processed data for device: {$deviceUid}");
         } catch (Exception $e) {
-            Log::warning("Telemetry processing error: " . $e->getMessage());
+            Log::warning('Telemetry processing error: '.$e->getMessage());
         }
     }
 
@@ -265,19 +273,16 @@ class MqttListenCommand extends Command
     {
         try {
             $data = json_decode($message, true);
-            if (!is_array($data)) {
+            if (! is_array($data)) {
                 return;
             }
 
             $deviceUid = $data['device_id'] ?? $this->extractDeviceUid($topic);
-            if (!$deviceUid) {
+            if (! $deviceUid) {
                 return;
             }
 
-            $device = Device::firstOrCreate(
-                ['device_uid' => $deviceUid],
-                ['name' => 'Smart Socket ' . $deviceUid]
-            );
+            $device = Device::where('device_uid', $deviceUid)->firstOrFail();
 
             $status = strtolower($data['status'] ?? 'online');
 
@@ -293,13 +298,13 @@ class MqttListenCommand extends Command
             ActivityLog::create([
                 'device_id' => $device->id,
                 'event_type' => 'STATUS_UPDATE',
-                'title' => 'Status Perangkat: ' . ucfirst($status),
+                'title' => 'Status Perangkat: '.ucfirst($status),
                 'description' => "Status koneksi perangkat diperbarui menjadi {$status}",
             ]);
 
             $this->line("<comment>[Status]</comment> Device {$deviceUid} status: {$status}");
         } catch (Exception $e) {
-            Log::warning("Status processing error: " . $e->getMessage());
+            Log::warning('Status processing error: '.$e->getMessage());
         }
     }
 
@@ -307,16 +312,16 @@ class MqttListenCommand extends Command
     {
         try {
             $data = json_decode($message, true);
-            if (!is_array($data)) {
+            if (! is_array($data)) {
                 return;
             }
 
             $deviceUid = $data['device_id'] ?? $this->extractDeviceUid($topic);
-            if (!$deviceUid) {
+            if (! $deviceUid) {
                 return;
             }
 
-            $device = Device::firstOrCreate(['device_uid' => $deviceUid]);
+            $device = Device::where('device_uid', $deviceUid)->firstOrFail();
 
             $channelId = null;
             if (isset($data['socket_number'])) {
@@ -338,13 +343,13 @@ class MqttListenCommand extends Command
             ActivityLog::create([
                 'device_id' => $device->id,
                 'event_type' => 'ALERT',
-                'title' => 'Peringatan Keamanan: ' . ($data['alert_type'] ?? 'Bahaya'),
-                'description' => ($data['action_taken'] ?? 'Tindakan otomatis diambil') . ' dengan nilai ' . ($data['value'] ?? 0),
+                'title' => 'Peringatan Keamanan: '.($data['alert_type'] ?? 'Bahaya'),
+                'description' => ($data['action_taken'] ?? 'Tindakan otomatis diambil').' dengan nilai '.($data['value'] ?? 0),
             ]);
 
-            $this->line("<error>[Alert]</error> Device {$deviceUid} alert: " . ($data['alert_type'] ?? ''));
+            $this->line("<error>[Alert]</error> Device {$deviceUid} alert: ".($data['alert_type'] ?? ''));
         } catch (Exception $e) {
-            Log::warning("Alert processing error: " . $e->getMessage());
+            Log::warning('Alert processing error: '.$e->getMessage());
         }
     }
 }

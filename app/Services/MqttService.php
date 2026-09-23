@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\Device;
 use Exception;
 use Illuminate\Support\Facades\Log;
 use PhpMqtt\Client\ConnectionSettings;
@@ -9,44 +10,41 @@ use PhpMqtt\Client\MqttClient;
 
 class MqttService
 {
-    protected string $host;
-    protected int $port;
-    protected bool $tls;
-    protected string $username;
-    protected string $password;
     protected int $timeout;
 
     public function __construct()
     {
-        $this->host = config('mqtt.host');
-        $this->port = (int) config('mqtt.port', 8883);
-        $this->tls = (bool) config('mqtt.tls', true);
-        $this->username = config('mqtt.username', '');
-        $this->password = config('mqtt.password', '');
         $this->timeout = (int) config('mqtt.timeout', 10);
     }
 
-    public function getClient(?string $clientId = null): MqttClient
+    public function getClient(?string $clientId = null, ?Device $device = null): MqttClient
     {
-        $id = $clientId ?? ('laravel_pub_' . uniqid());
-        return new MqttClient($this->host, $this->port, $id);
+        $host = $device?->mqtt_host ?: config('mqtt.host');
+        $port = $device?->mqtt_port ?: (int) config('mqtt.port', 8883);
+        $id = $clientId ?? $device?->mqtt_client_id ?? ('laravel_pub_'.uniqid());
+
+        return new MqttClient($host, $port, $id);
     }
 
-    public function getConnectionSettings(): ConnectionSettings
+    public function getConnectionSettings(?Device $device = null): ConnectionSettings
     {
+        $username = $device ? $device->mqtt_username : config('mqtt.username', '');
+        $password = $device ? $device->mqtt_password : config('mqtt.password', '');
+        $tls = $device ? $device->mqtt_tls : (bool) config('mqtt.tls', true);
+
         $settings = (new ConnectionSettings)
             ->setConnectTimeout($this->timeout)
             ->setKeepAliveInterval(60);
 
-        if (!empty($this->username)) {
-            $settings = $settings->setUsername($this->username);
+        if (! empty($username)) {
+            $settings = $settings->setUsername($username);
         }
 
-        if (!empty($this->password)) {
-            $settings = $settings->setPassword($this->password);
+        if (! empty($password)) {
+            $settings = $settings->setPassword($password);
         }
 
-        if ($this->tls) {
+        if ($tls) {
             $settings = $settings
                 ->setUseTls(true)
                 ->setTlsVerifyPeer(false)
@@ -56,27 +54,35 @@ class MqttService
         return $settings;
     }
 
-    public function publish(string $topic, array $payload, int $qos = 1, bool $retain = false): bool
+    public function publish(Device $device, string $topic, array $payload, int $qos = 1, bool $retain = false): bool
     {
+        if (! $device->mqtt_host || ! $device->mqtt_port) {
+            Log::notice("MQTT publish skipped for device [{$device->device_uid}]: credentials are not configured.");
+
+            return false;
+        }
+
         try {
-            $client = $this->getClient();
-            $settings = $this->getConnectionSettings();
+            $client = $this->getClient(device: $device);
+            $settings = $this->getConnectionSettings($device);
 
             $client->connect($settings, true);
             $client->publish($topic, json_encode($payload), $qos, $retain);
             $client->disconnect();
 
-            Log::info("MQTT Published to [{$topic}]: " . json_encode($payload));
+            Log::info("MQTT Published to [{$topic}]: ".json_encode($payload));
+
             return true;
         } catch (Exception $e) {
-            Log::error("MQTT Publish failed [{$topic}]: " . $e->getMessage());
+            Log::error("MQTT Publish failed [{$topic}]: ".$e->getMessage());
+
             return false;
         }
     }
 
-    public function publishSwitch(string $deviceUid, int $socketNumber, bool $turnOn, ?string $requestedBy = null): bool
+    public function publishSwitch(Device $device, int $socketNumber, bool $turnOn, ?string $requestedBy = null): bool
     {
-        $topic = "smartsocket/{$deviceUid}/command/switch";
+        $topic = "smartsocket/{$device->device_uid}/command/switch";
         $payload = [
             'socket_number' => $socketNumber,
             'state' => $turnOn ? 'ON' : 'OFF',
@@ -84,31 +90,31 @@ class MqttService
             'timestamp' => now()->timestamp,
         ];
 
-        return $this->publish($topic, $payload, 1, false);
+        return $this->publish($device, $topic, $payload, 1, false);
     }
 
-    public function publishThreshold(string $deviceUid, array $thresholds): bool
+    public function publishThreshold(Device $device, array $thresholds): bool
     {
-        $topic = "smartsocket/{$deviceUid}/command/threshold";
+        $topic = "smartsocket/{$device->device_uid}/command/threshold";
         $payload = [
-            'max_voltage' => (float) ($thresholds['max_voltage'] ?? 245.0),
-            'max_current' => (float) ($thresholds['max_current'] ?? 15.5),
-            'max_temperature' => (float) ($thresholds['max_temperature'] ?? 65.0),
-            'max_smoke_ppm' => (float) ($thresholds['max_smoke_ppm'] ?? 995.0),
+            'max_voltage' => (float) ($thresholds['max_voltage'] ?? 0),
+            'max_current' => (float) ($thresholds['max_current'] ?? 0),
+            'max_temperature' => (float) ($thresholds['max_temperature'] ?? 0),
+            'max_smoke_ppm' => (float) ($thresholds['max_smoke_ppm'] ?? 0),
             'timestamp' => now()->timestamp,
         ];
 
-        return $this->publish($topic, $payload, 1, true);
+        return $this->publish($device, $topic, $payload, 1, true);
     }
 
-    public function publishReconnect(string $deviceUid): bool
+    public function publishReconnect(Device $device): bool
     {
-        $topic = "smartsocket/{$deviceUid}/command/reconnect";
+        $topic = "smartsocket/{$device->device_uid}/command/reconnect";
         $payload = [
             'action' => 'RECONNECT_WIFI',
             'timestamp' => now()->timestamp,
         ];
 
-        return $this->publish($topic, $payload, 1, false);
+        return $this->publish($device, $topic, $payload, 1, false);
     }
 }

@@ -151,13 +151,13 @@
                 </div>
                 <div style="background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px;">
                     <div style="font-size: 10px; color: #64748b; font-weight: 700;">STATUS ESP32</div>
-                    <div style="font-size: 20px; font-weight: 800; color: {{ ($device->status ?? 'online') === 'online' ? '#16897f' : '#dc2626' }}; margin-top: 6px;">{{ strtoupper($device->status ?? 'ONLINE') }}</div>
+                    <div style="font-size: 20px; font-weight: 800; color: {{ ($device->status ?? 'offline') === 'online' ? '#16897f' : '#dc2626' }}; margin-top: 6px;">{{ strtoupper($device->status ?? 'OFFLINE') }}</div>
                     <small style="font-size: 9px; color: #94a3b8;">HiveMQ Cloud TLS</small>
                 </div>
             </div>
             <div style="margin-top: 14px; padding-top: 12px; border-top: 1px solid #e2e8f0; font-size: 10.5px; color: #64748b; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px;">
-                <span>Ambang Batas Aktif: <b>{{ $threshold->max_voltage ?? 245 }}V | {{ $threshold->max_current ?? 15.5 }}A | {{ $threshold->max_temperature ?? 65 }}°C | {{ $threshold->max_smoke_ppm ?? 995 }} ppm</b></span>
-                <span>Firmware: <b>v{{ $device->firmware_version ?? '2.1.4' }}</b></span>
+                <span>Ambang Batas Aktif: <b>{{ $threshold->max_voltage ?? 0 }}V | {{ $threshold->max_current ?? 0 }}A | {{ $threshold->max_temperature ?? 0 }}°C | {{ $threshold->max_smoke_ppm ?? 0 }} ppm</b></span>
+                <span>Firmware: <b>{{ $device->firmware_version ? 'v'.$device->firmware_version : 'Belum tersedia' }}</b></span>
             </div>
         </div>
 

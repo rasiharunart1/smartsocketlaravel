@@ -2,11 +2,10 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Device;
+use App\Models\DeviceThreshold;
 use App\Models\SensorLog;
 use App\Models\SocketChannel;
 use App\Models\TelemetryLog;
-use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 
@@ -15,8 +14,7 @@ class AnalyticsController extends Controller
     public function index(Request $request): View
     {
         $period = $request->get('period', 'day');
-        $deviceUid = config('mqtt.default_device_uid', 'ESP32_SOCKET_01');
-        $device = Device::where('device_uid', $deviceUid)->first() ?? Device::first();
+        $device = $request->user()->devices()->firstOrFail();
 
         $socket1 = SocketChannel::where('device_id', $device?->id)->where('channel_number', 1)->first();
         $socket2 = SocketChannel::where('device_id', $device?->id)->where('channel_number', 2)->first();
@@ -77,8 +75,8 @@ class AnalyticsController extends Controller
         }
 
         // Estimated cost (dynamic tariff from settings)
-        $threshold = \App\Models\DeviceThreshold::where('device_id', $device?->id)->first();
-        $plnRate = (float) ($threshold->kwh_rate ?? 1444.70);
+        $threshold = DeviceThreshold::where('device_id', $device?->id)->first();
+        $plnRate = (float) ($threshold->kwh_rate ?? 0);
         $totalKwh = $totalEnergy1 + $totalEnergy2;
         $estimatedCost = $totalKwh * $plnRate;
 
