@@ -19,7 +19,6 @@ return new class extends Migration
             $table->decimal('trigger_value', 8, 2);
             $table->decimal('threshold_value', 8, 2);
             $table->string('action_taken')->nullable();
-            $table->boolean('is_resolved')->default(false);
             $table->timestamps();
         });
     }

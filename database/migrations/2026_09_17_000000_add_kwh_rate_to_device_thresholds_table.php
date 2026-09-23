@@ -11,9 +11,11 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::table('device_thresholds', function (Blueprint $table) {
-            $table->decimal('kwh_rate', 10, 2)->default(1444.70)->after('max_smoke_ppm');
-        });
+        if (!Schema::hasColumn('device_thresholds', 'kwh_rate')) {
+            Schema::table('device_thresholds', function (Blueprint $table) {
+                $table->decimal('kwh_rate', 10, 2)->default(1444.70)->after('max_smoke_ppm');
+            });
+        }
     }
 
     /**
@@ -21,8 +23,10 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::table('device_thresholds', function (Blueprint $table) {
-            $table->dropColumn('kwh_rate');
-        });
+        if (Schema::hasColumn('device_thresholds', 'kwh_rate')) {
+            Schema::table('device_thresholds', function (Blueprint $table) {
+                $table->dropColumn('kwh_rate');
+            });
+        }
     }
 };

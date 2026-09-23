@@ -11,9 +11,11 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::table('device_alerts', function (Blueprint $table) {
-            $table->boolean('is_resolved')->default(false)->after('action_taken');
-        });
+        if (!Schema::hasColumn('device_alerts', 'is_resolved')) {
+            Schema::table('device_alerts', function (Blueprint $table) {
+                $table->boolean('is_resolved')->default(false)->after('action_taken');
+            });
+        }
     }
 
     /**
@@ -21,8 +23,10 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::table('device_alerts', function (Blueprint $table) {
-            $table->dropColumn('is_resolved');
-        });
+        if (Schema::hasColumn('device_alerts', 'is_resolved')) {
+            Schema::table('device_alerts', function (Blueprint $table) {
+                $table->dropColumn('is_resolved');
+            });
+        }
     }
 };
