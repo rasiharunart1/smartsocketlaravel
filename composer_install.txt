@@ -1,0 +1,30 @@
+./composer.json has been updated
+Running composer update php-mqtt/client
+Loading composer repositories with package information
+Updating dependencies
+Nothing to modify in lock file
+Installing dependencies from lock file (including require-dev)
+Nothing to install, update or remove
+Generating optimized autoload files
+> Illuminate\Foundation\ComposerScripts::postAutoloadDump
+> @php artisan package:discover --ansi
+
+ INFO Discovering packages. 
+
+ laravel/breeze .. DONE
+ laravel/pail .. DONE
+ laravel/pao .. DONE
+ laravel/tinker .. DONE
+ nesbot/carbon .. DONE
+ nunomaduro/collision .. DONE
+ nunomaduro/termwind .. DONE
+ php-mqtt/laravel-client .. DONE
+
+81 packages you are using are looking for funding.
+Use the `composer fund` command to find out more!
+> @php artisan vendor:publish --tag=laravel-assets --ansi --force
+
+ INFO No publishable resources for tag [laravel-assets]. 
+
+No security vulnerability advisories found.
+Using version ^2.3 for php-mqtt/client
