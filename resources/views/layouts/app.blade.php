@@ -157,20 +157,19 @@
                             <path d="M18 9C18 5.69 15.31 3 12 3C8.69 3 6 5.69 6 9C6 16 3 16 3 18H21C21 16 18 16 18 9Z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
                             <path d="M10 21H14" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
                         </svg>
-                        @if($alertsCount > 0)
-                            <span class="notification-dot" id="topNotificationDot"></span>
-                        @endif
+                        <span class="notification-dot" id="topNotificationDot" style="{{ $alertsCount > 0 ? '' : 'display: none;' }}"></span>
                     </button>
 
                     <div class="notif-menu" id="notifMenu">
                         <div class="notif-header">
                             <div class="notif-header-title">
                                 <span>Status Alat &amp; Peringatan</span>
-                                @if($alertsCount > 0)
-                                    <span class="notif-badge">{{ $alertsCount }} Alarm</span>
-                                @endif
+                                <span class="notif-badge" id="notifBadgeCount" style="{{ $alertsCount > 0 ? '' : 'display: none;' }}">{{ $alertsCount }} Alarm</span>
                             </div>
-                            <span class="notif-lcd-tag" title="Sesuai Tampilan Layar LCD Smart Socket">Status LCD</span>
+                            <div class="notif-header-actions">
+                                <button type="button" class="notif-resolve-btn" id="notifResolveBtn" onclick="resolveAllNotifications(event)" style="{{ $alertsCount > 0 ? '' : 'display: none;' }}" title="Tandai semua alarm selesai">Tandai Selesai</button>
+                                <span class="notif-lcd-tag" title="Sesuai Tampilan Layar LCD Smart Socket">Status LCD</span>
+                            </div>
                         </div>
 
                         <div class="notif-body" id="notifItemsList">
@@ -189,7 +188,7 @@
                                     </div>
                                     <div class="notif-content">
                                         <div class="notif-title-row">
-                                            <h4 class="notif-title">{{ $item['title'] }}</h4>
+                                            <h4 class="notif-title" title="{{ $item['title'] }}">{{ $item['title'] }}</h4>
                                             <span class="notif-tag {{ $item['category'] }}">{{ $item['badge'] }}</span>
                                         </div>
                                         <p class="notif-msg">{{ $item['message'] }}</p>
@@ -199,7 +198,7 @@
                             @empty
                                 <div class="notif-empty">
                                     <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="margin: 0 auto 8px; display: block;"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-                                    <div>Semua kondisi normal &amp; aman.</div>
+                                    <div style="font-weight: 600; color: #475569;">Semua kondisi normal &amp; aman.</div>
                                     <small style="color: #94a3b8;">Tidak ada peringatan atau alarm aktif.</small>
                                 </div>
                             @endforelse
@@ -348,6 +347,115 @@
             }
         });
     })();
+
+    // Dynamic Notification Renderer & Live Updater
+    window.renderNotificationItems = function(notifications, unreadCount) {
+        const list = document.getElementById('notifItemsList');
+        const dot = document.getElementById('topNotificationDot');
+        const badge = document.getElementById('notifBadgeCount');
+        const resolveBtn = document.getElementById('notifResolveBtn');
+        const toggleBtn = document.getElementById('notifToggleBtn');
+
+        const count = parseInt(unreadCount) || 0;
+
+        if (dot) dot.style.display = count > 0 ? 'block' : 'none';
+        if (badge) {
+            badge.textContent = `${count} Alarm`;
+            badge.style.display = count > 0 ? 'inline-block' : 'none';
+        }
+        if (resolveBtn) {
+            resolveBtn.style.display = count > 0 ? 'inline-block' : 'none';
+        }
+        if (toggleBtn) {
+            toggleBtn.title = `${count} Peringatan / Status Alat`;
+        }
+
+        if (!list) return;
+
+        if (!notifications || notifications.length === 0) {
+            list.innerHTML = `
+                <div class="notif-empty">
+                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="margin: 0 auto 8px; display: block;"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                    <div style="font-weight: 600; color: #475569;">Semua kondisi normal &amp; aman.</div>
+                    <small style="color: #94a3b8;">Tidak ada peringatan atau alarm aktif.</small>
+                </div>
+            `;
+            return;
+        }
+
+        let html = '';
+        notifications.forEach(item => {
+            let iconSvg = '';
+            if (item.type === 'alarm') {
+                iconSvg = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`;
+            } else if (item.type === 'connection') {
+                iconSvg = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><circle cx="12" cy="20" r="1"/></svg>`;
+            } else if (item.type === 'load') {
+                iconSvg = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>`;
+            } else {
+                iconSvg = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`;
+            }
+
+            const catClass = item.category || 'neutral';
+            const typeClass = item.type || 'activity';
+
+            html += `
+                <div class="notif-item ${typeClass} ${catClass}">
+                    <div class="notif-icon-box">${iconSvg}</div>
+                    <div class="notif-content">
+                        <div class="notif-title-row">
+                            <h4 class="notif-title" title="${escapeHtml(item.title)}">${escapeHtml(item.title)}</h4>
+                            <span class="notif-tag ${catClass}">${escapeHtml(item.badge)}</span>
+                        </div>
+                        <p class="notif-msg">${escapeHtml(item.message)}</p>
+                        <div class="notif-time">${escapeHtml(item.time)}</div>
+                    </div>
+                </div>
+            `;
+        });
+
+        list.innerHTML = html;
+    };
+
+    function escapeHtml(text) {
+        if (!text) return '';
+        const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' };
+        return String(text).replace(/[&<>"']/g, m => map[m]);
+    }
+
+    window.resolveAllNotifications = function(e) {
+        if (e) e.stopPropagation();
+        const csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+        fetch('{{ route("api.notifications.resolve-all", absolute: false) }}', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': csrf || '',
+                'Accept': 'application/json'
+            }
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data && data.success) {
+                window.renderNotificationItems(data.notifications, data.unread_count);
+            }
+        })
+        .catch(() => {});
+    };
+
+    // Polling dinamis notifikasi setiap 5 detik
+    setInterval(function() {
+        fetch('{{ route("api.notifications", absolute: false) }}', {
+            headers: { 'Accept': 'application/json' }
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data && data.success) {
+                window.renderNotificationItems(data.notifications, data.unread_count);
+            }
+        })
+        .catch(() => {});
+    }, 5000);
 </script>
 @stack('scripts')
 </body>

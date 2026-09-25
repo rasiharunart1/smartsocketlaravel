@@ -783,6 +783,11 @@
                         }
                     }
                 }
+
+                // Update notification dropdown live if notifications array is provided
+                if (data.notifications && typeof window.renderNotificationItems === 'function') {
+                    window.renderNotificationItems(data.notifications, data.unread_alerts ?? 0);
+                }
             })
             .catch(err => {
                 // Background poll silent catch

@@ -18,6 +18,8 @@ Route::middleware(['auth'])->group(function () {
     Route::post('/api/socket/toggle', [DashboardController::class, 'toggle'])->name('socket.toggle');
     Route::post('/api/device/reconnect', [DashboardController::class, 'reconnect'])->name('device.reconnect');
     Route::get('/api/device/telemetry', [DashboardController::class, 'telemetry'])->name('device.telemetry');
+    Route::get('/api/notifications', [DashboardController::class, 'notifications'])->name('api.notifications');
+    Route::post('/api/notifications/resolve-all', [DashboardController::class, 'resolveAllAlerts'])->name('api.notifications.resolve-all');
 
     // Analytics
     Route::get('/analytics', [AnalyticsController::class, 'index'])->name('analytics');

@@ -198,6 +198,10 @@ class DashboardController extends Controller
                 ->where('recorded_at', '>=', now()->subHours(24))
                 ->avg('power') ?? 0, 1);
 
+        // Dynamic Notification List from Database
+        $notifService = app(\App\Services\NotificationService::class);
+        $notifData = $notifService->getNotificationsForDevice($device);
+
         return response()->json([
             'device' => [
                 'status' => $device->status,
@@ -237,8 +241,48 @@ class DashboardController extends Controller
             ],
             'total_power' => round($p1 + $p2, 1),
             'total_energy' => round($e1 + $e2, 3),
-            'unread_alerts' => $unreadAlerts,
+            'unread_alerts' => $notifData['unread_count'],
+            'notifications' => $notifData['notifications'],
             'avg_power' => $avgPowerRecent,
+        ]);
+    }
+
+    public function notifications(Request $request): JsonResponse
+    {
+        $device = $request->user()->devices()->first();
+        $notifService = app(\App\Services\NotificationService::class);
+        $data = $notifService->getNotificationsForDevice($device);
+
+        return response()->json([
+            'success' => true,
+            'unread_count' => $data['unread_count'],
+            'notifications' => $data['notifications'],
+        ]);
+    }
+
+    public function resolveAllAlerts(Request $request): JsonResponse
+    {
+        $device = $request->user()->devices()->firstOrFail();
+
+        DeviceAlert::where('device_id', $device->id)
+            ->where('is_resolved', false)
+            ->update(['is_resolved' => true]);
+
+        ActivityLog::create([
+            'device_id' => $device->id,
+            'event_type' => 'SYSTEM_ALERT',
+            'title' => 'Semua Alarm Ditandai Selesai',
+            'description' => 'Pengguna menandai semua peringatan/alarm aktif sebagai telah diselesaikan.',
+        ]);
+
+        $notifService = app(\App\Services\NotificationService::class);
+        $data = $notifService->getNotificationsForDevice($device);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Semua peringatan telah ditandai selesai.',
+            'unread_count' => $data['unread_count'],
+            'notifications' => $data['notifications'],
         ]);
     }
 }
