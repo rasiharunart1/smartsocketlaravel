@@ -11,9 +11,9 @@ return new class extends Migration
      */
     public function up(): void
     {
-        if (!Schema::hasColumn('device_thresholds', 'log_interval')) {
+        if (!Schema::hasColumn('device_thresholds', 'device_interval')) {
             Schema::table('device_thresholds', function (Blueprint $table) {
-                $table->unsignedInteger('log_interval')->default(30)->after('kwh_rate');
+                $table->unsignedInteger('device_interval')->default(5)->after('log_interval');
             });
         }
     }
@@ -23,9 +23,9 @@ return new class extends Migration
      */
     public function down(): void
     {
-        if (Schema::hasColumn('device_thresholds', 'log_interval')) {
+        if (Schema::hasColumn('device_thresholds', 'device_interval')) {
             Schema::table('device_thresholds', function (Blueprint $table) {
-                $table->dropColumn('log_interval');
+                $table->dropColumn('device_interval');
             });
         }
     }

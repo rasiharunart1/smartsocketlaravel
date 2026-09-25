@@ -33,15 +33,19 @@ class SettingsController extends Controller
             ]);
         }
 
-        $threshold = $device->threshold ?: $device->threshold()->create([
+        $initialThreshold = [
             'max_voltage' => 245,
             'max_current' => 15.5,
             'max_temperature' => 65,
             'max_smoke_ppm' => 995,
             'kwh_rate' => 1444.70,
-            'device_interval' => 5,
             'log_interval' => 30,
-        ]);
+        ];
+        if (\Illuminate\Support\Facades\Schema::hasColumn('device_thresholds', 'device_interval')) {
+            $initialThreshold['device_interval'] = 5;
+        }
+
+        $threshold = $device->threshold ?: $device->threshold()->create($initialThreshold);
 
         return view('settings', compact('device', 'threshold'));
     }
@@ -51,18 +55,20 @@ class SettingsController extends Controller
         $validated = $request->validated();
         $device = $request->user()->devices()->firstOrFail();
 
-        $device->threshold()->updateOrCreate(
-            [],
-            [
-                'max_voltage' => (float) $validated['max_voltage'],
-                'max_current' => (float) $validated['max_current'],
-                'max_temperature' => (float) $validated['max_temperature'],
-                'max_smoke_ppm' => (float) $validated['max_smoke_ppm'],
-                'kwh_rate' => (float) $validated['kwh_rate'],
-                'device_interval' => (int) ($validated['device_interval'] ?? 5),
-                'log_interval' => (int) ($validated['log_interval'] ?? 30),
-            ]
-        );
+        $thresholdData = [
+            'max_voltage' => (float) $validated['max_voltage'],
+            'max_current' => (float) $validated['max_current'],
+            'max_temperature' => (float) $validated['max_temperature'],
+            'max_smoke_ppm' => (float) $validated['max_smoke_ppm'],
+            'kwh_rate' => (float) $validated['kwh_rate'],
+            'log_interval' => (int) ($validated['log_interval'] ?? 30),
+        ];
+
+        if (\Illuminate\Support\Facades\Schema::hasColumn('device_thresholds', 'device_interval')) {
+            $thresholdData['device_interval'] = (int) ($validated['device_interval'] ?? 5);
+        }
+
+        $device->threshold()->updateOrCreate([], $thresholdData);
 
         // Publish to MQTT broker
         $mqttDelivered = false;
