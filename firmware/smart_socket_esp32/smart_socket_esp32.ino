@@ -133,6 +133,7 @@ uint8_t       lcdPage           = 0;
 // ----------------------------- STATUS RELAY & SENSOR -----------------------------
 bool relay1State = false;  // false = OFF, true = ON
 bool relay2State = false;
+bool initialSyncDone = false; // Flag agar sinkronisasi state saklar dari cloud hanya terjadi 1x saat boot
 
 struct SensorSnapshot {
     float voltage1    = 0.0f;
@@ -387,7 +388,9 @@ void connectMqtt() {
 
         // Subscribe perintah & sinkronisasi state dari backend Laravel
         mqttClient.subscribe(TOPIC_SWITCH.c_str(), 1);
-        mqttClient.subscribe(TOPIC_SWITCH_SYNC.c_str(), 1);
+        if (!initialSyncDone) {
+            mqttClient.subscribe(TOPIC_SWITCH_SYNC.c_str(), 1);
+        }
         mqttClient.subscribe(TOPIC_THRESHOLD.c_str(), 1);
         mqttClient.subscribe(TOPIC_RECONNECT.c_str(), 1);
 
@@ -588,18 +591,30 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
         Serial.println("[Sync] Menerima data status saklar relay terbaru dari server (Init/Sync):");
         const char* s1 = doc["socket_1"] | "";
         const char* s2 = doc["socket_2"] | "";
+        bool syncChanged = false;
         if (strlen(s1) > 0) {
             bool on1 = (strcasecmp(s1, "ON") == 0);
-            setRelayOutput(1, on1);
-            Serial.printf("  Socket 1 disinkronkan => %s\n", on1 ? "ON" : "OFF");
+            if (relay1State != on1) {
+                setRelayOutput(1, on1);
+                syncChanged = true;
+                Serial.printf("  Socket 1 disinkronkan => %s\n", on1 ? "ON" : "OFF");
+            }
         }
         if (strlen(s2) > 0) {
             bool on2 = (strcasecmp(s2, "ON") == 0);
-            setRelayOutput(2, on2);
-            Serial.printf("  Socket 2 disinkronkan => %s\n", on2 ? "ON" : "OFF");
+            if (relay2State != on2) {
+                setRelayOutput(2, on2);
+                syncChanged = true;
+                Serial.printf("  Socket 2 disinkronkan => %s\n", on2 ? "ON" : "OFF");
+            }
         }
-        publishTelemetry();
-        updateLcd(millis());
+        // Unsubscribe agar pesan sync tidak menimpa saklar saat runtime operasi normal
+        initialSyncDone = true;
+        mqttClient.unsubscribe(TOPIC_SWITCH_SYNC.c_str());
+        if (syncChanged) {
+            publishTelemetry();
+            updateLcd(millis());
+        }
     } else if (topicStr == TOPIC_THRESHOLD) {
         float v_max = doc["max_voltage"] | 0.0f;
         float c_max = doc["max_current"] | 0.0f;

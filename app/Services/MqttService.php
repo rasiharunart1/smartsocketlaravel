@@ -85,12 +85,6 @@ class MqttService
 
     public function publishSwitch(Device $device, int $socketNumber, bool $turnOn, ?string $requestedBy = null): bool
     {
-        $channel1 = $device->socketChannels()->where('channel_number', 1)->first();
-        $channel2 = $device->socketChannels()->where('channel_number', 2)->first();
-
-        $s1State = ($socketNumber === 1) ? $turnOn : (bool) ($channel1?->is_active ?? false);
-        $s2State = ($socketNumber === 2) ? $turnOn : (bool) ($channel2?->is_active ?? false);
-
         $topic = "smartsocket/{$device->device_uid}/command/switch";
         $payload = [
             'socket_number' => $socketNumber,
@@ -99,17 +93,7 @@ class MqttService
             'timestamp' => now()->timestamp,
         ];
 
-        $this->publish($device, $topic, $payload, 1, false);
-
-        // Topik Sync dengan retain=true agar ESP32 yang baru boot/restart langsung menerima status relay terbaru
-        $topicSync = "smartsocket/{$device->device_uid}/command/switch/sync";
-        $payloadSync = [
-            'socket_1' => $s1State ? 'ON' : 'OFF',
-            'socket_2' => $s2State ? 'ON' : 'OFF',
-            'timestamp' => now()->timestamp,
-        ];
-
-        return $this->publish($device, $topicSync, $payloadSync, 1, true);
+        return $this->publish($device, $topic, $payload, 1, false);
     }
 
     public function publishSwitchSync(Device $device): bool
@@ -124,7 +108,7 @@ class MqttService
             'timestamp' => now()->timestamp,
         ];
 
-        return $this->publish($device, $topicSync, $payloadSync, 1, true);
+        return $this->publish($device, $topicSync, $payloadSync, 1, false);
     }
 
     public function publishThreshold(Device $device, array $thresholds): bool

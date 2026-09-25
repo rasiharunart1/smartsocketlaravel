@@ -215,6 +215,8 @@ class MqttListenCommand extends Command
 
                 if ($shouldLog) {
                     Cache::put($cacheKey, $nowSec, 86400);
+                    $reason = $relayChanged ? 'Perubahan Saklar Relay' : ($isThresholdViolated ? 'Alarm Keamanan Terpicu' : "Interval {$logIntervalSec}s Tercapai");
+                    $this->info("[DB Record] Menyimpan log sensor ke DB ({$device->device_uid}) - Alasan: {$reason}");
 
                     // Save unified SensorLog (All in one table)
                     SensorLog::create([
