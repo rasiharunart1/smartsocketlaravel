@@ -51,6 +51,7 @@ String TOPIC_TELEMETRY;   // smartsocket/{uid}/telemetry
 String TOPIC_STATUS;      // smartsocket/{uid}/status
 String TOPIC_ALERT;       // smartsocket/{uid}/alert
 String TOPIC_SWITCH;      // smartsocket/{uid}/command/switch
+String TOPIC_SWITCH_SYNC; // smartsocket/{uid}/command/switch/sync (Retained Relay State)
 String TOPIC_THRESHOLD;   // smartsocket/{uid}/command/threshold
 String TOPIC_RECONNECT;   // smartsocket/{uid}/command/reconnect
 
@@ -168,13 +169,18 @@ Preferences preferences;
 WiFiClientSecure wifiClient;
 PubSubClient mqttClient(wifiClient);
 
-// Helper pengatur relay dengan penanganan active-low aman
+// Helper pengatur relay dengan penanganan active-low aman dan penyimpanan Flash NVS
 inline void setRelayOutput(int socket, bool state) {
     uint8_t pin = (socket == 1) ? RELAY1_PIN : RELAY2_PIN;
     bool pinLevel = RELAY_ACTIVE_LOW ? (!state) : state;
     digitalWrite(pin, pinLevel ? HIGH : LOW);
     if (socket == 1) relay1State = state;
     if (socket == 2) relay2State = state;
+
+    preferences.begin("relays", false);
+    if (socket == 1) preferences.putBool("r1", state);
+    if (socket == 2) preferences.putBool("r2", state);
+    preferences.end();
 }
 
 // Forward declarations
@@ -209,13 +215,16 @@ void setup() {
     Serial.println("  Smart Socket ESP32 Firmware v" FIRMWARE_VERSION);
     Serial.println("=======================================================");
 
-    // 1. Inisialisasi Pin Relay terlebih dahulu (Cegah glitch klik saat boot)
-    digitalWrite(RELAY1_PIN, RELAY_ACTIVE_LOW ? HIGH : LOW);
+    // 1. Inisialisasi Pin Relay dengan status terakhir tersimpan dari Flash NVS
+    preferences.begin("relays", true);
+    relay1State = preferences.getBool("r1", false);
+    relay2State = preferences.getBool("r2", false);
+    preferences.end();
+
+    digitalWrite(RELAY1_PIN, RELAY_ACTIVE_LOW ? (!relay1State) : relay1State);
     pinMode(RELAY1_PIN, OUTPUT);
-    digitalWrite(RELAY2_PIN, RELAY_ACTIVE_LOW ? HIGH : LOW);
+    digitalWrite(RELAY2_PIN, RELAY_ACTIVE_LOW ? (!relay2State) : relay2State);
     pinMode(RELAY2_PIN, OUTPUT);
-    relay1State = false;
-    relay2State = false;
 
     // 2. Muat batas proteksi dari memori Flash (NVS)
     loadSavedThresholds();
@@ -241,12 +250,13 @@ void setup() {
     printLcdLine(1, " MEMULAI SISTEM");
 
     // 5. Build topik MQTT dinamis berbasis UID perangkat
-    TOPIC_TELEMETRY = String("smartsocket/") + DEVICE_UID + "/telemetry";
-    TOPIC_STATUS    = String("smartsocket/") + DEVICE_UID + "/status";
-    TOPIC_ALERT     = String("smartsocket/") + DEVICE_UID + "/alert";
-    TOPIC_SWITCH    = String("smartsocket/") + DEVICE_UID + "/command/switch";
-    TOPIC_THRESHOLD = String("smartsocket/") + DEVICE_UID + "/command/threshold";
-    TOPIC_RECONNECT = String("smartsocket/") + DEVICE_UID + "/command/reconnect";
+    TOPIC_TELEMETRY   = String("smartsocket/") + DEVICE_UID + "/telemetry";
+    TOPIC_STATUS      = String("smartsocket/") + DEVICE_UID + "/status";
+    TOPIC_ALERT       = String("smartsocket/") + DEVICE_UID + "/alert";
+    TOPIC_SWITCH      = String("smartsocket/") + DEVICE_UID + "/command/switch";
+    TOPIC_SWITCH_SYNC = String("smartsocket/") + DEVICE_UID + "/command/switch/sync";
+    TOPIC_THRESHOLD   = String("smartsocket/") + DEVICE_UID + "/command/threshold";
+    TOPIC_RECONNECT   = String("smartsocket/") + DEVICE_UID + "/command/reconnect";
 
     // 6. Inisialisasi HardwareSerial PZEM-004T v3.0
     PZEMSerial1.begin(9600, SERIAL_8N1, PZEM1_RX, PZEM1_TX);
@@ -257,10 +267,11 @@ void setup() {
     sensors.setWaitForConversion(false);
     sensors.requestTemperatures();
 
-    // 8. Inisialisasi WiFi
+    // 8. Inisialisasi WiFi & NTP Time Sync (WIB GMT+7)
     WiFi.mode(WIFI_STA);
     WiFi.setAutoReconnect(true);
     WiFi.begin(WIFI_SSID, WIFI_PASS);
+    configTime(7 * 3600, 0, "pool.ntp.org", "time.google.com");
     Serial.print("[WiFi] Menghubungkan ke ");
     Serial.println(WIFI_SSID);
     printLcdLine(0, "WiFi");
@@ -373,8 +384,9 @@ void connectMqtt() {
         printLcdLine(0, "MQTT Terhubung");
         printLcdLine(1, "Sinkronisasi...");
 
-        // Subscribe perintah dari backend Laravel
+        // Subscribe perintah & sinkronisasi state dari backend Laravel
         mqttClient.subscribe(TOPIC_SWITCH.c_str(), 1);
+        mqttClient.subscribe(TOPIC_SWITCH_SYNC.c_str(), 1);
         mqttClient.subscribe(TOPIC_THRESHOLD.c_str(), 1);
         mqttClient.subscribe(TOPIC_RECONNECT.c_str(), 1);
 
@@ -564,6 +576,22 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
         int socketNumber = doc["socket_number"] | 0;
         const char* stateStr = doc["state"] | "OFF";
         processSwitchCommand(socketNumber, stateStr);
+    } else if (topicStr == TOPIC_SWITCH_SYNC) {
+        Serial.println("[Sync] Menerima data status saklar relay terbaru dari server (Init/Sync):");
+        const char* s1 = doc["socket_1"] | "";
+        const char* s2 = doc["socket_2"] | "";
+        if (strlen(s1) > 0) {
+            bool on1 = (strcasecmp(s1, "ON") == 0);
+            setRelayOutput(1, on1);
+            Serial.printf("  Socket 1 disinkronkan => %s\n", on1 ? "ON" : "OFF");
+        }
+        if (strlen(s2) > 0) {
+            bool on2 = (strcasecmp(s2, "ON") == 0);
+            setRelayOutput(2, on2);
+            Serial.printf("  Socket 2 disinkronkan => %s\n", on2 ? "ON" : "OFF");
+        }
+        publishTelemetry();
+        updateLcd(millis());
     } else if (topicStr == TOPIC_THRESHOLD) {
         float v_max = doc["max_voltage"] | 0.0f;
         float c_max = doc["max_current"] | 0.0f;
@@ -719,7 +747,8 @@ void publishTelemetry() {
     // Buat payload JSON sesuai format baku backend Laravel (kompatibel ArduinoJson v6 & v7)
     ALLOC_JSON_DOC(doc, 1024);
     doc["device_id"] = DEVICE_UID;
-    doc["timestamp"] = (uint32_t)(millis() / 1000);
+    time_t nowSec = time(nullptr);
+    doc["timestamp"] = (nowSec > 1000000000) ? (uint32_t)nowSec : (uint32_t)(millis() / 1000);
 
     doc["environmental"]["temperature"] = latestSensor.temperature;
     doc["environmental"]["smoke_ppm"]    = latestSensor.smokePpm;
@@ -860,7 +889,8 @@ void sendAlert(const char* type, float value, float threshold, const char* actio
     if (socketNumber > 0) {
         doc["socket_number"] = socketNumber;
     }
-    doc["timestamp"]    = (uint32_t)(millis() / 1000);
+    time_t nowSec = time(nullptr);
+    doc["timestamp"]    = (nowSec > 1000000000) ? (uint32_t)nowSec : (uint32_t)(millis() / 1000);
 
     char buffer[256];
     serializeJson(doc, buffer);
@@ -884,7 +914,8 @@ String buildStatusPayload(bool online) {
     doc["mac_address"]      = WiFi.macAddress();
     doc["wifi_rssi"]        = WiFi.status() == WL_CONNECTED ? WiFi.RSSI() : 0;
     doc["firmware_version"] = FIRMWARE_VERSION;
-    doc["timestamp"]        = (uint32_t)(millis() / 1000);
+    time_t nowSec2 = time(nullptr);
+    doc["timestamp"]        = (nowSec2 > 1000000000) ? (uint32_t)nowSec2 : (uint32_t)(millis() / 1000);
 
     char buffer[512];
     serializeJson(doc, buffer);

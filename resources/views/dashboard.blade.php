@@ -533,12 +533,33 @@
     const MAX_CURRENT = {{ $maxCurr }};
     const MQTT_WS_CONFIG = @json($mqttWsConfig ?? null);
 
-    // Toggle Socket function via AJAX
+    // Toggle Socket function via AJAX & Direct WebSocket
     function toggleSocket(socketNum) {
         const btn = document.getElementById(`socket-btn-${socketNum}`);
+        const thumb = document.getElementById(`socket-thumb-${socketNum}`);
         if (!btn) return;
-        btn.disabled = true;
 
+        // 1. Tentukan target status baru
+        const isCurrentlyActive = (thumb && thumb.style.right === '4px');
+        const targetState = !isCurrentlyActive;
+
+        // 2. OPTIMISTIC UI: Langsung ubah posisi sakelar di layar secara instan (0 ms)!
+        applySocketState(socketNum, targetState, 'online');
+
+        // 3. Jika WebSocket terhubung, kirim perintah langsung melalui HiveMQ WSS (< 10 ms)!
+        if (mqttWsClient && mqttWsClient.connected && MQTT_WS_CONFIG) {
+            const deviceUid = MQTT_WS_CONFIG.device_uid || 'ESP32_SOCKET_01';
+            const topicSwitch = `smartsocket/${deviceUid}/command/switch`;
+            const payload = JSON.stringify({
+                socket_number: socketNum,
+                state: targetState ? 'ON' : 'OFF',
+                requested_by: 'web_ws_direct',
+                timestamp: Math.floor(Date.now() / 1000)
+            });
+            mqttWsClient.publish(topicSwitch, payload);
+        }
+
+        // 4. Sinkronkan ke database Laravel di latar belakang (Background AJAX)
         fetch('{{ route("socket.toggle", absolute: false) }}', {
             method: 'POST',
             headers: {
@@ -546,19 +567,19 @@
                 'X-CSRF-TOKEN': csrfToken,
                 'Accept': 'application/json'
             },
-            body: JSON.stringify({ socket_number: socketNum })
+            body: JSON.stringify({ socket_number: socketNum, state: targetState })
         })
         .then(res => res.json())
         .then(data => {
-            btn.disabled = false;
-            if (data.success) {
-                applySocketState(socketNum, data.is_active, data.status);
-            } else {
+            if (!data.success) {
+                // Revert jika backend menolak
+                applySocketState(socketNum, isCurrentlyActive, 'offline');
                 alert('Gagal mengubah status soket: ' + (data.message || 'Error'));
             }
         })
         .catch(err => {
-            btn.disabled = false;
+            // Revert jika koneksi gagal
+            applySocketState(socketNum, isCurrentlyActive, 'offline');
             console.error(err);
         });
     }
@@ -943,6 +964,22 @@
     //  Menjamin sinkronisasi database & log notifikasi jika websocket offline
     // =========================================================================
     setInterval(() => {
+        // JIKA WEBSOCKET AKTIF & TERHUBUNG:
+        // Metrik dialirkan instan (< 100ms) langsung dari ESP32.
+        // JANGAN timpa metrik sensor dengan hasil polling database agar nilai tidak bolak-balik ke 0!
+        if (mqttWsClient && mqttWsClient.connected) {
+            fetch('{{ route("api.notifications", absolute: false) }}')
+                .then(res => res.json())
+                .then(data => {
+                    if (data && data.success && typeof window.renderNotificationItems === 'function') {
+                        window.renderNotificationItems(data.notifications, data.unread_count);
+                    }
+                })
+                .catch(() => {});
+            return;
+        }
+
+        // HANYA JIKA WEBSOCKET OFFLINE (FALLBACK MODE):
         fetch('{{ route("device.telemetry", absolute: false) }}')
             .then(res => res.json())
             .then(data => {

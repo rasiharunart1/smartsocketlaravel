@@ -80,6 +80,12 @@ class DashboardController extends Controller
             'device_uid' => $device->device_uid,
         ];
 
+        try {
+            $this->mqttService->publishSwitchSync($device);
+        } catch (\Throwable $e) {
+            // Abaikan kegagalan sync saat render awal halaman
+        }
+
         return view('dashboard', compact(
             'device',
             'socket1',

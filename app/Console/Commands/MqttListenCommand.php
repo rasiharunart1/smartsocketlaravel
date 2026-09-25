@@ -113,15 +113,28 @@ class MqttListenCommand extends Command
             }
 
             DB::transaction(function () use ($deviceUid, $data) {
-                $device = Device::where('device_uid', $deviceUid)->firstOrFail();
+                $device = Device::where('device_uid', $deviceUid)->first();
+                if (! $device) {
+                    $device = Device::first();
+                    if ($device && empty($device->device_uid)) {
+                        $device->update(['device_uid' => $deviceUid]);
+                    }
+                }
+
+                if (! $device) {
+                    Log::warning("No device registered in database for telemetry [{$deviceUid}]");
+                    return;
+                }
 
                 $device->update([
                     'status' => 'online',
                     'last_seen_at' => now(),
                 ]);
 
-                $recordedAt = isset($data['timestamp'])
-                    ? Carbon::createFromTimestamp($data['timestamp'])
+                // Pastikan timestamp valid (Epoch Unix > tahun 2001), jika uptime ESP32 (< 1M) gunakan now()
+                $rawTs = isset($data['timestamp']) ? (int) $data['timestamp'] : 0;
+                $recordedAt = ($rawTs > 1000000000)
+                    ? Carbon::createFromTimestamp($rawTs)
                     : now();
 
                 // 1. Parse Environmental metrics (Single Enclosure: DHT22 & MQ-2)
@@ -217,49 +230,73 @@ class MqttListenCommand extends Command
                     'recorded_at' => $recordedAt,
                 ]);
 
-                // 6. Check Safety Thresholds & Trigger Alerts
+                // 6. Check Safety Thresholds & Trigger Alerts (dengan proteksi duplikasi/flood)
                 $threshold = DeviceThreshold::firstOrCreate(['device_id' => $device->id]);
 
                 if ($threshold->max_temperature > 0 && $temp >= $threshold->max_temperature) {
-                    DeviceAlert::create([
-                        'device_id' => $device->id,
-                        'alert_type' => 'OVER_TEMPERATURE',
-                        'trigger_value' => $temp,
-                        'threshold_value' => $threshold->max_temperature,
-                        'action_taken' => 'WARNING_LOGGED',
-                    ]);
+                    $hasRecent = DeviceAlert::where('device_id', $device->id)
+                        ->where('alert_type', 'OVER_TEMPERATURE')
+                        ->where('created_at', '>=', now()->subSeconds(30))
+                        ->exists();
+                    if (! $hasRecent) {
+                        DeviceAlert::create([
+                            'device_id' => $device->id,
+                            'alert_type' => 'OVER_TEMPERATURE',
+                            'trigger_value' => $temp,
+                            'threshold_value' => $threshold->max_temperature,
+                            'action_taken' => 'WARNING_LOGGED',
+                        ]);
+                    }
                 }
 
                 if ($threshold->max_smoke_ppm > 0 && $smoke >= $threshold->max_smoke_ppm) {
-                    DeviceAlert::create([
-                        'device_id' => $device->id,
-                        'alert_type' => 'SMOKE_DETECTED',
-                        'trigger_value' => $smoke,
-                        'threshold_value' => $threshold->max_smoke_ppm,
-                        'action_taken' => 'EMERGENCY_ALERT',
-                    ]);
+                    $hasRecent = DeviceAlert::where('device_id', $device->id)
+                        ->where('alert_type', 'SMOKE_DETECTED')
+                        ->where('created_at', '>=', now()->subSeconds(30))
+                        ->exists();
+                    if (! $hasRecent) {
+                        DeviceAlert::create([
+                            'device_id' => $device->id,
+                            'alert_type' => 'SMOKE_DETECTED',
+                            'trigger_value' => $smoke,
+                            'threshold_value' => $threshold->max_smoke_ppm,
+                            'action_taken' => 'EMERGENCY_ALERT',
+                        ]);
+                    }
                 }
 
                 $maxV = max($v1, $v2);
                 if ($threshold->max_voltage > 0 && $maxV >= $threshold->max_voltage) {
-                    DeviceAlert::create([
-                        'device_id' => $device->id,
-                        'alert_type' => 'OVER_VOLTAGE',
-                        'trigger_value' => $maxV,
-                        'threshold_value' => $threshold->max_voltage,
-                        'action_taken' => 'WARNING_LOGGED',
-                    ]);
+                    $hasRecent = DeviceAlert::where('device_id', $device->id)
+                        ->where('alert_type', 'OVER_VOLTAGE')
+                        ->where('created_at', '>=', now()->subSeconds(30))
+                        ->exists();
+                    if (! $hasRecent) {
+                        DeviceAlert::create([
+                            'device_id' => $device->id,
+                            'alert_type' => 'OVER_VOLTAGE',
+                            'trigger_value' => $maxV,
+                            'threshold_value' => $threshold->max_voltage,
+                            'action_taken' => 'WARNING_LOGGED',
+                        ]);
+                    }
                 }
 
                 $maxC = max($c1, $c2);
                 if ($threshold->max_current > 0 && $maxC >= $threshold->max_current) {
-                    DeviceAlert::create([
-                        'device_id' => $device->id,
-                        'alert_type' => 'OVER_CURRENT',
-                        'trigger_value' => $maxC,
-                        'threshold_value' => $threshold->max_current,
-                        'action_taken' => 'WARNING_LOGGED',
-                    ]);
+                    $hasRecent = DeviceAlert::where('device_id', $device->id)
+                        ->where('alert_type', 'OVER_CURRENT')
+                        ->where('created_at', '>=', now()->subSeconds(30))
+                        ->exists();
+                    if (! $hasRecent) {
+                        DeviceAlert::create([
+                            'device_id' => $device->id,
+                            'alert_type' => 'OVER_CURRENT',
+                            'trigger_value' => $maxC,
+                            'threshold_value' => $threshold->max_current,
+                            'action_taken' => 'WARNING_LOGGED',
+                        ]);
+                    }
                 }
             });
 
@@ -282,7 +319,17 @@ class MqttListenCommand extends Command
                 return;
             }
 
-            $device = Device::where('device_uid', $deviceUid)->firstOrFail();
+            $device = Device::where('device_uid', $deviceUid)->first();
+            if (! $device) {
+                $device = Device::first();
+                if ($device && empty($device->device_uid)) {
+                    $device->update(['device_uid' => $deviceUid]);
+                }
+            }
+
+            if (! $device) {
+                return;
+            }
 
             $status = strtolower($data['status'] ?? 'online');
 
@@ -321,7 +368,17 @@ class MqttListenCommand extends Command
                 return;
             }
 
-            $device = Device::where('device_uid', $deviceUid)->firstOrFail();
+            $device = Device::where('device_uid', $deviceUid)->first();
+            if (! $device) {
+                $device = Device::first();
+                if ($device && empty($device->device_uid)) {
+                    $device->update(['device_uid' => $deviceUid]);
+                }
+            }
+
+            if (! $device) {
+                return;
+            }
 
             $channelId = null;
             if (isset($data['socket_number'])) {
