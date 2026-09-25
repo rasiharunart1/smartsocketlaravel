@@ -115,14 +115,14 @@
                         <span class="threshold-value" id="badge-smoke">{{ $threshold->max_smoke_ppm ?? 0 }} ppm</span>
                     </div>
 
-                    <input type="range" name="max_smoke_ppm" min="0" max="2000" step="25"
+                    <input type="range" name="max_smoke_ppm" min="0" max="4000" step="25"
                            value="{{ old('max_smoke_ppm', $threshold->max_smoke_ppm ?? 0) }}"
                            oninput="document.getElementById('badge-smoke').textContent = this.value + ' ppm'"
                            style="width: 100%; margin: 15px 0; accent-color: #123f91; cursor: pointer;">
 
                     <div class="slider-note">
                         <span>NORMAL (500 ppm)</span>
-                        <span>MAKS. (2000 ppm)</span>
+                        <span>MAKS. (4000 ppm)</span>
                     </div>
 
                     <p>

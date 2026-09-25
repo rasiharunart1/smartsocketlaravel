@@ -32,12 +32,12 @@
 #define FIRMWARE_VERSION "2.4.0"
 
 // Identitas perangkat: Samakan dengan "Device UID" pada web menu Settings
-#define DEVICE_UID "ESP32_SOCKET_01"
+#define DEVICE_UID "SS-EPJPJV0Q8DOM"
 
 // ----------------------------- KONFIGURASI WIFI -----------------------------
 // Masukkan SSID dan Password WiFi jaringan Anda di sini
-const char* WIFI_SSID = "YOUR_WIFI_SSID";
-const char* WIFI_PASS = "YOUR_WIFI_PASSWORD";
+const char* WIFI_SSID = "MEGADATA";
+const char* WIFI_PASS = "MEGADATA";
 
 // ----------------------------- MQTT (HiveMQ Cloud TLS 8883) -----------------------------
 const char* MQTT_HOST      = "ab11f67ab13c48b5937d15d0439112f4.s1.eu.hivemq.cloud";
@@ -565,12 +565,17 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
         const char* stateStr = doc["state"] | "OFF";
         processSwitchCommand(socketNumber, stateStr);
     } else if (topicStr == TOPIC_THRESHOLD) {
-        processThresholdCommand(
-            doc["max_voltage"]     | thresholds.max_voltage,
-            doc["max_current"]     | thresholds.max_current,
-            doc["max_temperature"] | thresholds.max_temperature,
-            doc["max_smoke_ppm"]   | thresholds.max_smoke_ppm
-        );
+        float v_max = doc["max_voltage"] | 0.0f;
+        float c_max = doc["max_current"] | 0.0f;
+        float t_max = doc["max_temperature"] | 0.0f;
+        float s_max = doc["max_smoke_ppm"] | 0.0f;
+
+        if (v_max <= 0.0f && doc.containsKey("voltage")) v_max = doc["voltage"] | 0.0f;
+        if (c_max <= 0.0f && doc.containsKey("current")) c_max = doc["current"] | 0.0f;
+        if (t_max <= 0.0f && doc.containsKey("temperature")) t_max = doc["temperature"] | 0.0f;
+        if (s_max <= 0.0f && doc.containsKey("smoke_ppm")) s_max = doc["smoke_ppm"] | 0.0f;
+
+        processThresholdCommand(v_max, c_max, t_max, s_max);
     } else if (topicStr == TOPIC_RECONNECT) {
         processReconnectCommand();
     }
@@ -603,17 +608,20 @@ void processSwitchCommand(int socketNumber, const char* stateStr) {
 }
 
 void processThresholdCommand(float v_max, float c_max, float t_max, float s_max) {
-    if (v_max > 0) thresholds.max_voltage = v_max;
-    if (c_max > 0) thresholds.max_current = c_max;
-    if (t_max > 0) thresholds.max_temperature = t_max;
-    if (s_max > 0) thresholds.max_smoke_ppm = s_max;
+    bool updated = false;
+    if (v_max > 0) { thresholds.max_voltage = v_max; updated = true; }
+    if (c_max > 0) { thresholds.max_current = c_max; updated = true; }
+    if (t_max > 0) { thresholds.max_temperature = t_max; updated = true; }
+    if (s_max > 0) { thresholds.max_smoke_ppm = s_max; updated = true; }
 
     Serial.println("[Threshold] Nilai batas proteksi diperbarui dari web:");
     Serial.printf("  Voltage=%.1fV, Current=%.1fA, Temp=%.1fC, Smoke=%.0f ppm\n",
                   thresholds.max_voltage, thresholds.max_current,
                   thresholds.max_temperature, thresholds.max_smoke_ppm);
 
-    saveThresholds();
+    if (updated) {
+        saveThresholds();
+    }
 }
 
 void processReconnectCommand() {

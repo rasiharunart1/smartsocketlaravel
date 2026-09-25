@@ -49,8 +49,8 @@ class MqttListenCommand extends Command
 
         while (true) {
             try {
-                if ($device && (! $device->mqtt_host || ! $device->mqtt_port)) {
-                    $this->error('MQTT credentials for this device are not configured.');
+                if (! $host || ! $port) {
+                    $this->error('MQTT broker host or port is not configured.');
 
                     return self::FAILURE;
                 }

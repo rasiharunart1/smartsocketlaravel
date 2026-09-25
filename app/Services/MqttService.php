@@ -28,9 +28,9 @@ class MqttService
 
     public function getConnectionSettings(?Device $device = null): ConnectionSettings
     {
-        $username = $device ? $device->mqtt_username : config('mqtt.username', '');
-        $password = $device ? $device->mqtt_password : config('mqtt.password', '');
-        $tls = $device ? $device->mqtt_tls : (bool) config('mqtt.tls', true);
+        $username = $device?->mqtt_username ?: config('mqtt.username', '');
+        $password = $device?->mqtt_password ?: config('mqtt.password', '');
+        $tls = $device && $device->mqtt_tls !== null ? (bool) $device->mqtt_tls : (bool) config('mqtt.tls', true);
 
         $settings = (new ConnectionSettings)
             ->setConnectTimeout($this->timeout)
@@ -56,8 +56,11 @@ class MqttService
 
     public function publish(Device $device, string $topic, array $payload, int $qos = 1, bool $retain = false): bool
     {
-        if (! $device->mqtt_host || ! $device->mqtt_port) {
-            Log::notice("MQTT publish skipped for device [{$device->device_uid}]: credentials are not configured.");
+        $host = $device->mqtt_host ?: config('mqtt.host');
+        $port = $device->mqtt_port ?: (int) config('mqtt.port', 8883);
+
+        if (! $host || ! $port) {
+            Log::notice("MQTT publish skipped for device [{$device->device_uid}]: broker host and port are not configured.");
 
             return false;
         }
