@@ -130,34 +130,64 @@
                     </p>
                 </div>
 
-                <!-- Interval Pencatatan Data Log & Telemetri -->
+                <!-- Interval Device (Dashboard Live) -->
                 <div class="threshold">
                     <div class="threshold-head">
                         <h3>
-                            Interval Logging &amp;<br>
-                            Telemetri
+                            Interval Device<br>
+                            (Dashboard Live)
                         </h3>
-                        <span class="threshold-value" id="badge-interval">{{ $threshold->log_interval ?? 10 }} Detik</span>
+                        <span class="threshold-value" id="badge-dev-interval">{{ $threshold->device_interval ?? 5 }} Detik</span>
                     </div>
 
-                    <select name="log_interval" id="log_interval"
-                            onchange="document.getElementById('badge-interval').textContent = this.value + ' Detik'"
+                    <select name="device_interval" id="device_interval"
+                            onchange="document.getElementById('badge-dev-interval').textContent = this.value + ' Detik'"
                             style="width: 100%; margin: 15px 0; padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13px; font-weight: 600; color: #0f243d; background: #fff; cursor: pointer;">
-                        <option value="3" {{ old('log_interval', $threshold->log_interval ?? 10) == 3 ? 'selected' : '' }}>3 Detik (Sangat Cepat / Real-time Maksimal)</option>
-                        <option value="5" {{ old('log_interval', $threshold->log_interval ?? 10) == 5 ? 'selected' : '' }}>5 Detik (Cepat / Responsif)</option>
-                        <option value="10" {{ old('log_interval', $threshold->log_interval ?? 10) == 10 ? 'selected' : '' }}>10 Detik (Standar Rekomendasi)</option>
-                        <option value="30" {{ old('log_interval', $threshold->log_interval ?? 10) == 30 ? 'selected' : '' }}>30 Detik (Efisien / Database Ringan)</option>
-                        <option value="60" {{ old('log_interval', $threshold->log_interval ?? 10) == 60 ? 'selected' : '' }}>60 Detik (1 Menit / Hemat Penyimpanan)</option>
-                        <option value="300" {{ old('log_interval', $threshold->log_interval ?? 10) == 300 ? 'selected' : '' }}>300 Detik (5 Menit / Sangat Hemat)</option>
+                        <option value="1" {{ old('device_interval', $threshold->device_interval ?? 5) == 1 ? 'selected' : '' }}>1 Detik (Super Responsif / High Frequency)</option>
+                        <option value="2" {{ old('device_interval', $threshold->device_interval ?? 5) == 2 ? 'selected' : '' }}>2 Detik (Sangat Cepat)</option>
+                        <option value="3" {{ old('device_interval', $threshold->device_interval ?? 5) == 3 ? 'selected' : '' }}>3 Detik (Cepat / Responsif)</option>
+                        <option value="5" {{ old('device_interval', $threshold->device_interval ?? 5) == 5 ? 'selected' : '' }}>5 Detik (Standar Rekomendasi)</option>
+                        <option value="10" {{ old('device_interval', $threshold->device_interval ?? 5) == 10 ? 'selected' : '' }}>10 Detik (Santai / Ringan WiFi)</option>
                     </select>
 
                     <div class="slider-note">
-                        <span>MIN. (3s)</span>
-                        <span>HEMAT (300s)</span>
+                        <span>CEPAT (1s)</span>
+                        <span>HEMAT (10s)</span>
                     </div>
 
                     <p>
-                        Interval penyimpanan log riwayat ke database dan frekuensi telemetri ESP32 untuk mencegah database membengkak.
+                        Frekuensi pengiriman data dari ESP32 untuk pembaruan angka sensor di <b>Dashboard Web secara real-time</b>.
+                    </p>
+                </div>
+
+                <!-- Interval Record Database (Log Riwayat) -->
+                <div class="threshold">
+                    <div class="threshold-head">
+                        <h3>
+                            Interval Record<br>
+                            (Database Log)
+                        </h3>
+                        <span class="threshold-value" id="badge-log-interval">{{ $threshold->log_interval ?? 30 }} Detik</span>
+                    </div>
+
+                    <select name="log_interval" id="log_interval"
+                            onchange="document.getElementById('badge-log-interval').textContent = this.value + ' Detik'"
+                            style="width: 100%; margin: 15px 0; padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13px; font-weight: 600; color: #0f243d; background: #fff; cursor: pointer;">
+                        <option value="10" {{ old('log_interval', $threshold->log_interval ?? 30) == 10 ? 'selected' : '' }}>10 Detik (Rapat / Detail Tinggi)</option>
+                        <option value="30" {{ old('log_interval', $threshold->log_interval ?? 30) == 30 ? 'selected' : '' }}>30 Detik (Standar Rekomendasi)</option>
+                        <option value="60" {{ old('log_interval', $threshold->log_interval ?? 30) == 60 ? 'selected' : '' }}>60 Detik (1 Menit / Optimal &amp; Ringan)</option>
+                        <option value="180" {{ old('log_interval', $threshold->log_interval ?? 30) == 180 ? 'selected' : '' }}>180 Detik (3 Menit / Efisien)</option>
+                        <option value="300" {{ old('log_interval', $threshold->log_interval ?? 30) == 300 ? 'selected' : '' }}>300 Detik (5 Menit / Hemat Database)</option>
+                        <option value="600" {{ old('log_interval', $threshold->log_interval ?? 30) == 600 ? 'selected' : '' }}>600 Detik (10 Menit / Ultra Hemat Storage)</option>
+                    </select>
+
+                    <div class="slider-note">
+                        <span>DETAIL (10s)</span>
+                        <span>HEMAT (600s)</span>
+                    </div>
+
+                    <p>
+                        Jeda waktu perekaman permanen ke <b>Database Server (Riwayat Log)</b> agar penyimpanan tidak cepat membengkak.
                     </p>
                 </div>
             </div>
@@ -190,7 +220,8 @@
             <input type="hidden" name="max_current" value="{{ $threshold->max_current ?? 0 }}">
             <input type="hidden" name="max_temperature" value="{{ $threshold->max_temperature ?? 0 }}">
             <input type="hidden" name="max_smoke_ppm" value="{{ $threshold->max_smoke_ppm ?? 0 }}">
-            <input type="hidden" name="log_interval" value="{{ $threshold->log_interval ?? 10 }}">
+            <input type="hidden" name="device_interval" value="{{ $threshold->device_interval ?? 5 }}">
+            <input type="hidden" name="log_interval" value="{{ $threshold->log_interval ?? 30 }}">
 
             <div style="display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap;">
                 <div style="flex: 1; min-width: 220px;">

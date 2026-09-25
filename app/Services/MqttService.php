@@ -135,7 +135,8 @@ class MqttService
             'max_current' => (float) ($thresholds['max_current'] ?? 0),
             'max_temperature' => (float) ($thresholds['max_temperature'] ?? 0),
             'max_smoke_ppm' => (float) ($thresholds['max_smoke_ppm'] ?? 0),
-            'log_interval' => (int) ($thresholds['log_interval'] ?? 10),
+            'device_interval' => (int) ($thresholds['device_interval'] ?? 5),
+            'log_interval' => (int) ($thresholds['log_interval'] ?? 30),
             'timestamp' => now()->timestamp,
         ];
 

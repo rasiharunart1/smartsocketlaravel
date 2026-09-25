@@ -105,7 +105,7 @@ const byte customCharDegree[8] = {
 
 // ----------------------------- WAKTU & INTERVAL (NON-BLOCKING) -----------------------------
 #define SENSOR_READ_INTERVAL_MS 1000   // Pembacaan sensor & evaluasi keselamatan tiap 1 detik
-unsigned long telemetryIntervalMs = 10000; // Interval kirim telemetri ke server (dinamis via server, default 10s)
+unsigned long telemetryIntervalMs = 5000;  // Interval kirim telemetri ke server (dinamis via server, default 5s)
 #define STATUS_INTERVAL_MS      30000  // Kirim heartbeat online berkala tiap 30 detik
 #define LCD_PAGE_INTERVAL_MS    2500   // Rotasi halaman info LCD tiap 2,5 detik
 #define ALERT_COOLDOWN_MS       30000  // Batasi kirim alarm serupa maks 1x per 30 detik
@@ -160,7 +160,7 @@ struct Thresholds {
     float max_current     = 15.5f;  // Default 15.5A
     float max_temperature = 65.0f;  // Default 65°C
     float max_smoke_ppm   = 995.0f; // Default 995 ppm
-    uint32_t log_interval = 10;     // Default interval log 10 detik
+    uint32_t device_interval = 5;   // Default interval telemetri ESP32 ke dashboard 5 detik
 } thresholds;
 
 // Objek Penyimpanan Flash Non-Volatile (NVS Preferences)
@@ -192,7 +192,7 @@ void checkWifiAndMqtt(unsigned long now);
 void connectMqtt();
 void mqttCallback(char* topic, byte* payload, unsigned int length);
 void processSwitchCommand(int socketNumber, const char* stateStr);
-void processThresholdCommand(float v_max, float c_max, float t_max, float s_max, int interval_sec = 0);
+void processThresholdCommand(float v_max, float c_max, float t_max, float s_max, int dev_interval = 0);
 void processReconnectCommand();
 float readTemperature();
 float readSmokePPM();
@@ -412,7 +412,7 @@ void loadSavedThresholds() {
     thresholds.max_current     = preferences.getFloat("c_max", 15.5f);
     thresholds.max_temperature = preferences.getFloat("t_max", 65.0f);
     thresholds.max_smoke_ppm   = preferences.getFloat("s_max", 995.0f);
-    thresholds.log_interval    = preferences.getUInt("l_int", 10);
+    thresholds.device_interval = preferences.getUInt("d_int", 5);
     preferences.end();
 
     // Validasi nilai dari flash jika sebelumnya kosong atau data acak
@@ -428,16 +428,16 @@ void loadSavedThresholds() {
     if (isnan(thresholds.max_smoke_ppm) || thresholds.max_smoke_ppm <= 50.0f || thresholds.max_smoke_ppm > 5000.0f) {
         thresholds.max_smoke_ppm = 995.0f;
     }
-    if (thresholds.log_interval < 3 || thresholds.log_interval > 3600) {
-        thresholds.log_interval = 10;
+    if (thresholds.device_interval < 1 || thresholds.device_interval > 3600) {
+        thresholds.device_interval = 5;
     }
-    telemetryIntervalMs = thresholds.log_interval * 1000UL;
+    telemetryIntervalMs = thresholds.device_interval * 1000UL;
 
     Serial.println("[NVS] Ambang batas keamanan & interval berhasil dimuat dari Flash:");
-    Serial.printf("  Voltage=%.1fV, Current=%.1fA, Temp=%.1fC, Smoke=%.0f ppm, Interval=%u s\n",
+    Serial.printf("  Voltage=%.1fV, Current=%.1fA, Temp=%.1fC, Smoke=%.0f ppm, Interval Device=%u s\n",
                   thresholds.max_voltage, thresholds.max_current,
                   thresholds.max_temperature, thresholds.max_smoke_ppm,
-                  thresholds.log_interval);
+                  thresholds.device_interval);
 }
 
 void saveThresholds() {
@@ -446,7 +446,7 @@ void saveThresholds() {
     preferences.putFloat("c_max", thresholds.max_current);
     preferences.putFloat("t_max", thresholds.max_temperature);
     preferences.putFloat("s_max", thresholds.max_smoke_ppm);
-    preferences.putUInt("l_int", thresholds.log_interval);
+    preferences.putUInt("d_int", thresholds.device_interval);
     preferences.end();
     Serial.println("[NVS] Ambang batas keamanan & interval berhasil disimpan ke Flash!");
 }
@@ -605,14 +605,14 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
         float c_max = doc["max_current"] | 0.0f;
         float t_max = doc["max_temperature"] | 0.0f;
         float s_max = doc["max_smoke_ppm"] | 0.0f;
-        int interval_sec = doc["log_interval"] | 0;
+        int dev_interval = doc["device_interval"] | doc["telemetry_interval"] | 0;
 
         if (v_max <= 0.0f && doc.containsKey("voltage")) v_max = doc["voltage"] | 0.0f;
         if (c_max <= 0.0f && doc.containsKey("current")) c_max = doc["current"] | 0.0f;
         if (t_max <= 0.0f && doc.containsKey("temperature")) t_max = doc["temperature"] | 0.0f;
         if (s_max <= 0.0f && doc.containsKey("smoke_ppm")) s_max = doc["smoke_ppm"] | 0.0f;
 
-        processThresholdCommand(v_max, c_max, t_max, s_max, interval_sec);
+        processThresholdCommand(v_max, c_max, t_max, s_max, dev_interval);
     } else if (topicStr == TOPIC_RECONNECT) {
         processReconnectCommand();
     }
@@ -644,23 +644,23 @@ void processSwitchCommand(int socketNumber, const char* stateStr) {
     updateLcd(millis());
 }
 
-void processThresholdCommand(float v_max, float c_max, float t_max, float s_max, int interval_sec) {
+void processThresholdCommand(float v_max, float c_max, float t_max, float s_max, int dev_interval) {
     bool updated = false;
     if (v_max > 0) { thresholds.max_voltage = v_max; updated = true; }
     if (c_max > 0) { thresholds.max_current = c_max; updated = true; }
     if (t_max > 0) { thresholds.max_temperature = t_max; updated = true; }
     if (s_max > 0) { thresholds.max_smoke_ppm = s_max; updated = true; }
-    if (interval_sec >= 3 && interval_sec <= 3600) {
-        thresholds.log_interval = interval_sec;
-        telemetryIntervalMs = (unsigned long)interval_sec * 1000UL;
+    if (dev_interval >= 1 && dev_interval <= 3600) {
+        thresholds.device_interval = dev_interval;
+        telemetryIntervalMs = (unsigned long)dev_interval * 1000UL;
         updated = true;
     }
 
     Serial.println("[Threshold] Nilai batas proteksi & interval diperbarui dari web:");
-    Serial.printf("  Voltage=%.1fV, Current=%.1fA, Temp=%.1fC, Smoke=%.0f ppm, Interval=%u s\n",
+    Serial.printf("  Voltage=%.1fV, Current=%.1fA, Temp=%.1fC, Smoke=%.0f ppm, Interval Device=%u s\n",
                   thresholds.max_voltage, thresholds.max_current,
                   thresholds.max_temperature, thresholds.max_smoke_ppm,
-                  thresholds.log_interval);
+                  thresholds.device_interval);
 
     if (updated) {
         saveThresholds();

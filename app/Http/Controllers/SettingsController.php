@@ -39,6 +39,8 @@ class SettingsController extends Controller
             'max_temperature' => 65,
             'max_smoke_ppm' => 995,
             'kwh_rate' => 1444.70,
+            'device_interval' => 5,
+            'log_interval' => 30,
         ]);
 
         return view('settings', compact('device', 'threshold'));
@@ -57,7 +59,8 @@ class SettingsController extends Controller
                 'max_temperature' => (float) $validated['max_temperature'],
                 'max_smoke_ppm' => (float) $validated['max_smoke_ppm'],
                 'kwh_rate' => (float) $validated['kwh_rate'],
-                'log_interval' => (int) ($validated['log_interval'] ?? 10),
+                'device_interval' => (int) ($validated['device_interval'] ?? 5),
+                'log_interval' => (int) ($validated['log_interval'] ?? 30),
             ]
         );
 
@@ -69,7 +72,8 @@ class SettingsController extends Controller
                 'max_current' => (float) $validated['max_current'],
                 'max_temperature' => (float) $validated['max_temperature'],
                 'max_smoke_ppm' => (float) $validated['max_smoke_ppm'],
-                'log_interval' => (int) ($validated['log_interval'] ?? 10),
+                'device_interval' => (int) ($validated['device_interval'] ?? 5),
+                'log_interval' => (int) ($validated['log_interval'] ?? 30),
             ]);
         } catch (Exception $e) {
             $mqttDelivered = false;
@@ -79,7 +83,7 @@ class SettingsController extends Controller
             'device_id' => $device->id,
             'event_type' => 'SETTING_UPDATE',
             'title' => 'Ambang Batas & Parameter Diperbarui',
-            'description' => "Batas baru: {$validated['max_voltage']}V, {$validated['max_current']}A, {$validated['max_temperature']}°C, {$validated['max_smoke_ppm']}ppm, Interval: ".($validated['log_interval'] ?? 10)."s, tarif Rp ".number_format((float) $validated['kwh_rate'], 2, ',', '.').'/kWh'.($mqttDelivered ? ' (Tersinkron ke broker MQTT)' : ''),
+            'description' => "Batas: {$validated['max_voltage']}V, {$validated['max_current']}A, {$validated['max_temperature']}°C, {$validated['max_smoke_ppm']}ppm | Interval Device: ".($validated['device_interval'] ?? 5)."s | Interval DB: ".($validated['log_interval'] ?? 30)."s | Tarif: Rp ".number_format((float) $validated['kwh_rate'], 2, ',', '.').'/kWh'.($mqttDelivered ? ' (Tersinkron ke ESP32)' : ''),
         ]);
 
         $statusMsg = 'Ambang batas keamanan & parameter berhasil disimpan!'.($mqttDelivered ? ' Pengaturan disinkronkan ke ESP32 via HiveMQ.' : '');

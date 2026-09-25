@@ -205,7 +205,7 @@ class MqttListenCommand extends Command
                 }
 
                 // 6. Mekanisme Interval Data Logging ke Database
-                $logIntervalSec = max(3, (int) ($threshold->log_interval ?? 10));
+                $logIntervalSec = max(3, (int) ($threshold->log_interval ?? 30));
                 $cacheKey = "device_{$device->id}_last_sensor_log_time";
                 $lastLogTime = (int) Cache::get($cacheKey, 0);
                 $nowSec = time();
