@@ -631,17 +631,26 @@ void processSwitchCommand(int socketNumber, const char* stateStr) {
         return;
     }
 
+    bool stateChanged = false;
     if (socketNumber == 1) {
-        setRelayOutput(1, turnOn);
-        Serial.printf("[Relay] Socket 1 => %s\n", turnOn ? "ON" : "OFF");
+        if (relay1State != turnOn) {
+            setRelayOutput(1, turnOn);
+            stateChanged = true;
+            Serial.printf("[Relay] Socket 1 => %s\n", turnOn ? "ON" : "OFF");
+        }
     } else if (socketNumber == 2) {
-        setRelayOutput(2, turnOn);
-        Serial.printf("[Relay] Socket 2 => %s\n", turnOn ? "ON" : "OFF");
+        if (relay2State != turnOn) {
+            setRelayOutput(2, turnOn);
+            stateChanged = true;
+            Serial.printf("[Relay] Socket 2 => %s\n", turnOn ? "ON" : "OFF");
+        }
     }
 
-    // Segera publish telemetri agar dashboard web update instan (< 100ms)
-    publishTelemetry();
-    updateLcd(millis());
+    // Hanya kirim telemetri instan jika memang terjadi perubahan status relay fisik
+    if (stateChanged) {
+        publishTelemetry();
+        updateLcd(millis());
+    }
 }
 
 void processThresholdCommand(float v_max, float c_max, float t_max, float s_max, int dev_interval) {

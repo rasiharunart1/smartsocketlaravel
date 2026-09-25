@@ -107,6 +107,7 @@ class DashboardController extends Controller
         $validated = $request->validate([
             'socket_number' => 'required|integer|in:1,2',
             'state' => 'nullable|boolean',
+            'skip_mqtt' => 'nullable|boolean',
         ]);
 
         $device = $request->user()->devices()->firstOrFail();
@@ -117,10 +118,17 @@ class DashboardController extends Controller
 
         $newState = isset($validated['state']) ? (bool) $validated['state'] : ! $socket->is_active;
 
-        try {
-            $published = $this->mqttService->publishSwitch($device, $socket->channel_number, $newState);
-        } catch (Exception $e) {
-            $published = false;
+        $skipMqtt = (bool) ($validated['skip_mqtt'] ?? false);
+        $published = false;
+
+        if (! $skipMqtt) {
+            try {
+                $published = $this->mqttService->publishSwitch($device, $socket->channel_number, $newState);
+            } catch (Exception $e) {
+                $published = false;
+            }
+        } else {
+            $published = true; // Sudah dikirim langsung melalui HiveMQ WebSocket di browser
         }
 
         $socket->update([

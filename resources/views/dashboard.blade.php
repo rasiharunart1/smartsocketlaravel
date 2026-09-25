@@ -533,20 +533,46 @@
     const MAX_CURRENT = {{ $maxCurr }};
     const MQTT_WS_CONFIG = @json($mqttWsConfig ?? null);
 
+    // Anti Race-Condition & Anti-Bouncing State Tracking
+    const pendingToggles = {
+        1: { targetState: null, expiresAt: 0 },
+        2: { targetState: null, expiresAt: 0 }
+    };
+    const toggleCooldownUntil = { 1: 0, 2: 0 };
+
     // Toggle Socket function via AJAX & Direct WebSocket
     function toggleSocket(socketNum) {
+        const now = Date.now();
+        // 1. Debounce cooldown: cegah spam-klik tombol dalam waktu < 500ms
+        if (now < toggleCooldownUntil[socketNum]) {
+            console.warn(`[Toggle] Cooldown aktif pada Socket ${socketNum}`);
+            return;
+        }
+        toggleCooldownUntil[socketNum] = now + 500;
+
         const btn = document.getElementById(`socket-btn-${socketNum}`);
         const thumb = document.getElementById(`socket-thumb-${socketNum}`);
         if (!btn) return;
 
-        // 1. Tentukan target status baru
-        const isCurrentlyActive = (thumb && thumb.style.right === '4px');
+        // 2. Tentukan target status baru
+        const isCurrentlyActive = (pendingToggles[socketNum].targetState !== null)
+            ? pendingToggles[socketNum].targetState
+            : (thumb && thumb.style.right === '4px');
         const targetState = !isCurrentlyActive;
 
-        // 2. OPTIMISTIC UI: Langsung ubah posisi sakelar di layar secara instan (0 ms)!
-        applySocketState(socketNum, targetState, 'online');
+        // 3. Pasang Pending Window (Suppression Lock) selama 3.5 detik
+        // Paket telemetri lama yang masih in-flight di jaringan TIDAK BOLEH membalikkan switch UI!
+        pendingToggles[socketNum] = {
+            targetState: targetState,
+            expiresAt: now + 3500
+        };
 
-        // 3. Jika WebSocket terhubung, kirim perintah langsung melalui HiveMQ WSS (< 10 ms)!
+        // 4. OPTIMISTIC UI: Langsung ubah posisi sakelar di layar secara instan (0 ms)!
+        applySocketState(socketNum, targetState, 'online');
+        btn.style.opacity = '0.75';
+
+        let wsSent = false;
+        // 5. Jika WebSocket terhubung, kirim perintah langsung melalui HiveMQ WSS (QoS 1)
         if (mqttWsClient && mqttWsClient.connected && MQTT_WS_CONFIG) {
             const deviceUid = MQTT_WS_CONFIG.device_uid || 'ESP32_SOCKET_01';
             const topicSwitch = `smartsocket/${deviceUid}/command/switch`;
@@ -556,10 +582,11 @@
                 requested_by: 'web_ws_direct',
                 timestamp: Math.floor(Date.now() / 1000)
             });
-            mqttWsClient.publish(topicSwitch, payload);
+            mqttWsClient.publish(topicSwitch, payload, { qos: 1 });
+            wsSent = true;
         }
 
-        // 4. Sinkronkan ke database Laravel di latar belakang (Background AJAX)
+        // 6. Sinkronkan ke database Laravel di latar belakang (Background AJAX)
         fetch('{{ route("socket.toggle", absolute: false) }}', {
             method: 'POST',
             headers: {
@@ -567,18 +594,26 @@
                 'X-CSRF-TOKEN': csrfToken,
                 'Accept': 'application/json'
             },
-            body: JSON.stringify({ socket_number: socketNum, state: targetState })
+            body: JSON.stringify({
+                socket_number: socketNum,
+                state: targetState,
+                skip_mqtt: wsSent // Hindari duplikasi MQTT publish dari backend jika WS sudah mengirim!
+            })
         })
         .then(res => res.json())
         .then(data => {
+            btn.style.opacity = '1';
             if (!data.success) {
-                // Revert jika backend menolak
+                // Revert jika backend menolak (misal proteksi keamanan aktif)
+                pendingToggles[socketNum] = { targetState: null, expiresAt: 0 };
                 applySocketState(socketNum, isCurrentlyActive, 'offline');
                 alert('Gagal mengubah status soket: ' + (data.message || 'Error'));
             }
         })
         .catch(err => {
+            btn.style.opacity = '1';
             // Revert jika koneksi gagal
+            pendingToggles[socketNum] = { targetState: null, expiresAt: 0 };
             applySocketState(socketNum, isCurrentlyActive, 'offline');
             console.error(err);
         });
@@ -741,6 +776,25 @@
         const s1 = data.sockets?.socket_1 || data.socket_1;
         if (s1) {
             const isActive1 = (String(s1.relay_state).toUpperCase() === 'ON' || s1.relay_state === true || s1.relay_state === 1 || s1.is_active === true);
+            
+            // Cek apakah Socket 1 sedang dalam pending window (menunggu konfirmasi perintah)
+            let shouldUpdateSwitch1 = true;
+            if (pendingToggles[1].targetState !== null) {
+                if (Date.now() < pendingToggles[1].expiresAt) {
+                    if (isActive1 === pendingToggles[1].targetState) {
+                        // ESP32 sudah mengonfirmasi state target! Hapus pending lock
+                        pendingToggles[1] = { targetState: null, expiresAt: 0 };
+                        const btn1 = document.getElementById('socket-btn-1');
+                        if (btn1) btn1.style.opacity = '1';
+                    } else {
+                        // Paket telemetri lama yang tertinggal di buffer jaringan, ABAIKAN agar saklar tidak terpental balik!
+                        shouldUpdateSwitch1 = false;
+                    }
+                } else {
+                    pendingToggles[1] = { targetState: null, expiresAt: 0 };
+                }
+            }
+
             updateSocketChannelMetrics(1, {
                 voltage: s1.voltage,
                 current: s1.current,
@@ -748,7 +802,7 @@
                 energy: s1.energy,
                 frequency: s1.frequency,
                 power_factor: s1.power_factor,
-                is_active: isActive1,
+                is_active: shouldUpdateSwitch1 ? isActive1 : undefined,
                 status: 'online'
             });
         }
@@ -757,6 +811,23 @@
         const s2 = data.sockets?.socket_2 || data.socket_2;
         if (s2) {
             const isActive2 = (String(s2.relay_state).toUpperCase() === 'ON' || s2.relay_state === true || s2.relay_state === 1 || s2.is_active === true);
+            
+            // Cek apakah Socket 2 sedang dalam pending window
+            let shouldUpdateSwitch2 = true;
+            if (pendingToggles[2].targetState !== null) {
+                if (Date.now() < pendingToggles[2].expiresAt) {
+                    if (isActive2 === pendingToggles[2].targetState) {
+                        pendingToggles[2] = { targetState: null, expiresAt: 0 };
+                        const btn2 = document.getElementById('socket-btn-2');
+                        if (btn2) btn2.style.opacity = '1';
+                    } else {
+                        shouldUpdateSwitch2 = false;
+                    }
+                } else {
+                    pendingToggles[2] = { targetState: null, expiresAt: 0 };
+                }
+            }
+
             updateSocketChannelMetrics(2, {
                 voltage: s2.voltage,
                 current: s2.current,
@@ -764,7 +835,7 @@
                 energy: s2.energy,
                 frequency: s2.frequency,
                 power_factor: s2.power_factor,
-                is_active: isActive2,
+                is_active: shouldUpdateSwitch2 ? isActive2 : undefined,
                 status: 'online'
             });
         }
@@ -987,12 +1058,34 @@
 
                 // Update Socket 1
                 if (data.socket_1) {
-                    updateSocketChannelMetrics(1, data.socket_1);
+                    const isActive1 = data.socket_1.is_active;
+                    let shouldUpdateSwitch1 = true;
+                    if (pendingToggles[1].targetState !== null && Date.now() < pendingToggles[1].expiresAt) {
+                        if (isActive1 === pendingToggles[1].targetState) {
+                            pendingToggles[1] = { targetState: null, expiresAt: 0 };
+                        } else {
+                            shouldUpdateSwitch1 = false;
+                        }
+                    }
+                    const payload1 = Object.assign({}, data.socket_1);
+                    if (!shouldUpdateSwitch1) delete payload1.is_active;
+                    updateSocketChannelMetrics(1, payload1);
                 }
 
                 // Update Socket 2
                 if (data.socket_2) {
-                    updateSocketChannelMetrics(2, data.socket_2);
+                    const isActive2 = data.socket_2.is_active;
+                    let shouldUpdateSwitch2 = true;
+                    if (pendingToggles[2].targetState !== null && Date.now() < pendingToggles[2].expiresAt) {
+                        if (isActive2 === pendingToggles[2].targetState) {
+                            pendingToggles[2] = { targetState: null, expiresAt: 0 };
+                        } else {
+                            shouldUpdateSwitch2 = false;
+                        }
+                    }
+                    const payload2 = Object.assign({}, data.socket_2);
+                    if (!shouldUpdateSwitch2) delete payload2.is_active;
+                    updateSocketChannelMetrics(2, payload2);
                 }
 
                 // Update Environment (Suhu & Asap)
