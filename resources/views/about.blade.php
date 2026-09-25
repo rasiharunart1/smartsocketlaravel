@@ -6,6 +6,14 @@
 @section('content')
 <section class="content about-main">
 
+    <!-- Page Header -->
+    <div class="page-header" style="margin-bottom: 20px;">
+        <div>
+            <h1 class="page-title">Tentang Sistem</h1>
+            <p class="page-subtitle">Arsitektur perangkat keras, spesifikasi sensor dual-channel, dan integrasi cloud IoT.</p>
+        </div>
+    </div>
+
     <div class="panel about-card">
 
         <!-- Introduction -->

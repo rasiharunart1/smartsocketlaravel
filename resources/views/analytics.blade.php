@@ -9,8 +9,8 @@
     <!-- Page Header -->
     <div class="page-header">
         <div>
-            <h1>Analisis Energi</h1>
-            <p>Metrik konsumsi daya real-time dan perbandingan antar soket.</p>
+            <h1 class="page-title">Analisis Energi</h1>
+            <p class="page-subtitle">Metrik konsumsi daya real-time dan perbandingan antar soket.</p>
         </div>
 
         <div class="period-switch">

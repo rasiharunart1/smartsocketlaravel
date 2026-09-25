@@ -6,7 +6,7 @@
 @section('content')
 <section class="content">
     <div class="profile-container">
-        <div class="settings-title" style="margin-bottom: 20px;">
+        <div class="page-header" style="margin-bottom: 20px;">
             <div>
                 <h1 class="page-title">Profil Pengguna</h1>
                 <p class="page-subtitle">

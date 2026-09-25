@@ -7,7 +7,7 @@
 <section class="content">
 
     <!-- Page Header -->
-    <div class="history-head">
+    <div class="page-header history-head">
         <div>
             <h1 class="page-title">Log Riwayat Sensor Enclosure</h1>
             <p class="page-subtitle">

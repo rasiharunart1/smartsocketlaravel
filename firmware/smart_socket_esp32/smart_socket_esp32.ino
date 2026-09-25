@@ -2,19 +2,18 @@
  * ============================================================================
  *  Smart Socket ESP32 Firmware
  *  ----------------------------------------------------------------------------
- *  Dual PZEM-004T + 2-Channel Relay + DS18B20 + MQ-2
- *  Target     : ESP32 (Arduino Core)
- *  Backend    : Laravel 13 (smartsocket) via HiveMQ Cloud MQTT (TLS 8883)
+ *  Dual PZEM-004T v3.0 + 2-Channel Relay + DS18B20 + MQ-2 + LCD 16x2 I2C
+ *  Target Hardware : ESP32 (Arduino Core 2.x & 3.x)
+ *  Backend Platform: Laravel 13 (smartsocket) via HiveMQ Cloud MQTT (TLS 8883)
  *
- *  Pin Mapping (sesuai spesifikasi hardware):
- *    RELAY1_PIN   = 21
- *    RELAY2_PIN   = 19
- *    DS18B20_PIN  = 5
- *    MQ2_PIN      = 34 (ADC1)
- *    PZEM1_RX     = 16
- *    PZEM1_TX     = 17  (HardwareSerial 1)
- *    PZEM2_RX     = 26
- *    PZEM2_TX     = 27  (HardwareSerial 2)
+ *  Pin Mapping:
+ *    #define RELAY1_PIN   18   // Relay Soket 1 (Output)
+ *    #define RELAY2_PIN   19   // Relay Soket 2 (Output)
+ *    #define DS18B20_PIN  5    // Sensor Suhu Enclosure (OneWire)
+ *    #define MQ2_PIN      34   // Sensor Gas & Asap Enclosure (ADC1 CH6)
+ *    PZEM1 (RX 16, TX 17)      // PZEM-004T v3.0 Soket 1 (HardwareSerial 1)
+ *    PZEM2 (RX 26, TX 27)      // PZEM-004T v3.0 Soket 2 (HardwareSerial 2)
+ *    I2C LCD (SDA 21, SCL 22)  // LCD 16x2 I2C Address 0x27 / 0x3F
  * ============================================================================
  */
 
@@ -25,27 +24,29 @@
 #include <PZEM004Tv30.h>
 #include <OneWire.h>
 #include <DallasTemperature.h>
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
+#include <Preferences.h>
 
-// ----------------------------- KONFIGURASI UMUM -----------------------------
-#define FIRMWARE_VERSION "2.1.4"
+// ----------------------------- VERSI FIRMWARE & IDENTITAS -----------------------------
+#define FIRMWARE_VERSION "2.4.0"
 
-// Identitas perangkat (harus sama dengan DEFAULT_DEVICE_UID backend)
+// Identitas perangkat: Samakan dengan "Device UID" pada web menu Settings
 #define DEVICE_UID "ESP32_SOCKET_01"
 
-// ----------------------------- WIFI -----------------------------
-// Ganti sesuai jaringan Anda (atau gunakan WiFiManager)
+// ----------------------------- KONFIGURASI WIFI -----------------------------
+// Masukkan SSID dan Password WiFi jaringan Anda di sini
 const char* WIFI_SSID = "YOUR_WIFI_SSID";
 const char* WIFI_PASS = "YOUR_WIFI_PASSWORD";
 
-// ----------------------------- MQTT (HiveMQ Cloud) -----------------------------
-const char* MQTT_HOST     = "ab11f67ab13c48b5937d15d0439112f4.s1.eu.hivemq.cloud";
-const uint16_t MQTT_PORT  = 8883;
-const char* MQTT_USER     = "wilda";
-const char* MQTT_PASS     = "wildajuwita321";
-// Client ID unik per perangkat (hindari tabrakan antar perangkat)
-const char* MQTT_CLIENT_ID = "esp32_socket_01_client";
+// ----------------------------- MQTT (HiveMQ Cloud TLS 8883) -----------------------------
+const char* MQTT_HOST      = "ab11f67ab13c48b5937d15d0439112f4.s1.eu.hivemq.cloud";
+const uint16_t MQTT_PORT   = 8883;
+const char* MQTT_USER      = "wilda";
+const char* MQTT_PASS      = "wildajuwita321";
+const char* MQTT_CLIENT_ID = "ESP32_SmartSocket";
 
-// ----------------------------- TOPIK MQTT -----------------------------
+// ----------------------------- TOPIK MQTT DINAMIS -----------------------------
 String TOPIC_TELEMETRY;   // smartsocket/{uid}/telemetry
 String TOPIC_STATUS;      // smartsocket/{uid}/status
 String TOPIC_ALERT;       // smartsocket/{uid}/alert
@@ -54,58 +55,192 @@ String TOPIC_THRESHOLD;   // smartsocket/{uid}/command/threshold
 String TOPIC_RECONNECT;   // smartsocket/{uid}/command/reconnect
 
 // ----------------------------- PIN MAPPING -----------------------------
-#define RELAY1_PIN 21
-#define RELAY2_PIN 19
+#define RELAY1_PIN   18   // Relay Soket 1
+#define RELAY2_PIN   19   // Relay Soket 2
 
-#define DS18B20_PIN 5
-#define MQ2_PIN 34
+#define DS18B20_PIN  5    // Sensor Suhu Enclosure DS18B20 (OneWire)
+#define MQ2_PIN      34   // Sensor Gas & Asap MQ-2 (Input Analog ADC1 CH6)
 
-#define PZEM1_RX 16
-#define PZEM1_TX 17
+// PZEM 1 (Soket 1) -> HardwareSerial(1)
+#define PZEM1_RX     16
+#define PZEM1_TX     17
 HardwareSerial PZEMSerial1(1);
 PZEM004Tv30 pzem1(PZEMSerial1, PZEM1_RX, PZEM1_TX);
 
-#define PZEM2_RX 26
-#define PZEM2_TX 27
+// PZEM 2 (Soket 2) -> HardwareSerial(2)
+#define PZEM2_RX     26
+#define PZEM2_TX     27
 HardwareSerial PZEMSerial2(2);
 PZEM004Tv30 pzem2(PZEMSerial2, PZEM2_RX, PZEM2_TX);
 
+// OneWire & Dallas Temperature
 OneWire oneWire(DS18B20_PIN);
 DallasTemperature sensors(&oneWire);
 
-// ----------------------------- WAKTU & INTERVAL -----------------------------
-#define TELEMETRY_INTERVAL_MS 5000   // kirim telemetri tiap 5 detik
-#define STATUS_INTERVAL_MS    30000  // publish status online tiap 30 detik
-#define RECONNECT_INTERVAL_MS 5000   // jeda retry koneksi
+// LCD 16x2 I2C
+#define LCD_I2C_ADDR 0x27  // Alamat standar PCF8574 (0x27) atau PCF8574A (0x3F)
+#define LCD_I2C_SDA  21
+#define LCD_I2C_SCL  22
+#define LCD_COLUMNS  16
+#define LCD_ROWS     2
+LiquidCrystal_I2C lcd(LCD_I2C_ADDR, LCD_COLUMNS, LCD_ROWS);
 
-unsigned long lastTelemetryMs = 0;
-unsigned long lastStatusMs    = 0;
-unsigned long lastReconnectMs = 0;
+// Konfigurasi Level Logika Relay:
+// Sebagian besar modul relay 2-channel optocoupler adalah ACTIVE-LOW (LOW = ON, HIGH = OFF).
+// Jika modul relay Anda tipe ACTIVE-HIGH (HIGH = ON), ubah menjadi false.
+#define RELAY_ACTIVE_LOW  true
 
-// ----------------------------- RELAY STATE -----------------------------
+// Custom Icon untuk LCD 16x2 (Karakter Derajat °)
+const byte customCharDegree[8] = {
+    0b00111,
+    0b00101,
+    0b00111,
+    0b00000,
+    0b00000,
+    0b00000,
+    0b00000,
+    0b00000
+};
+
+// ----------------------------- WAKTU & INTERVAL (NON-BLOCKING) -----------------------------
+#define SENSOR_READ_INTERVAL_MS 1000   // Pembacaan sensor & evaluasi keselamatan tiap 1 detik
+#define TELEMETRY_INTERVAL_MS   5000   // Kirim telemetri ke server tiap 5 detik
+#define STATUS_INTERVAL_MS      30000  // Kirim heartbeat online berkala tiap 30 detik
+#define LCD_PAGE_INTERVAL_MS    2500   // Rotasi halaman info LCD tiap 2,5 detik
+#define ALERT_COOLDOWN_MS       30000  // Batasi kirim alarm serupa maks 1x per 30 detik
+#define WIFI_RETRY_INTERVAL_MS  10000  // Jeda rekoneksi WiFi jika terputus
+#define MQTT_RECONNECT_MS       5000   // Jeda rekoneksi MQTT jika terputus
+
+unsigned long lastSensorReadMs  = 0;
+unsigned long lastTelemetryMs   = 0;
+unsigned long lastStatusMs      = 0;
+unsigned long lastLcdPageMs     = 0;
+unsigned long lastWifiRetryMs   = 0;
+unsigned long lastMqttRetryMs   = 0;
+unsigned long lcdAlertUntilMs   = 0;
+unsigned long lastAlertSentMs   = 0;
+String        lastAlertSentType = "";
+uint8_t       lcdPage           = 0;
+
+// ----------------------------- ARDUINOJSON V6 & V7 MACRO -----------------------------
+#if defined(ARDUINOJSON_VERSION_MAJOR) && (ARDUINOJSON_VERSION_MAJOR >= 7)
+    #define ALLOC_JSON_DOC(doc, size) JsonDocument doc
+#else
+    #define ALLOC_JSON_DOC(doc, size) StaticJsonDocument<size> doc
+#endif
+
+// ----------------------------- STATUS RELAY & SENSOR -----------------------------
 bool relay1State = false;  // false = OFF, true = ON
 bool relay2State = false;
 
-// ----------------------------- THRESHOLD (default, bisa diupdate via MQTT) -----------------------------
+struct SensorSnapshot {
+    float voltage1    = 0.0f;
+    float current1    = 0.0f;
+    float power1      = 0.0f;
+    float energy1     = 0.0f;
+    float freq1       = 0.0f;
+    float pf1         = 0.0f;
+
+    float voltage2    = 0.0f;
+    float current2    = 0.0f;
+    float power2      = 0.0f;
+    float energy2     = 0.0f;
+    float freq2       = 0.0f;
+    float pf2         = 0.0f;
+
+    float temperature = 0.0f;
+    float smokePpm    = 0.0f;
+    bool  isTripped   = false;
+} latestSensor;
+
+// ----------------------------- THRESHOLD -----------------------------
 struct Thresholds {
-    float max_voltage     = 245.0;
-    float max_current     = 15.5;
-    float max_temperature = 65.0;
-    float max_smoke_ppm   = 995.0;
+    float max_voltage     = 245.0f; // Default 245V
+    float max_current     = 15.5f;  // Default 15.5A
+    float max_temperature = 65.0f;  // Default 65°C
+    float max_smoke_ppm   = 995.0f; // Default 995 ppm
 } thresholds;
 
-// ----------------------------- OBJEK MQTT -----------------------------
+// Objek Penyimpanan Flash Non-Volatile (NVS Preferences)
+Preferences preferences;
+
+// ----------------------------- OBJEK MQTT TLS -----------------------------
 WiFiClientSecure wifiClient;
 PubSubClient mqttClient(wifiClient);
+
+// Helper pengatur relay dengan penanganan active-low aman
+inline void setRelayOutput(int socket, bool state) {
+    uint8_t pin = (socket == 1) ? RELAY1_PIN : RELAY2_PIN;
+    bool pinLevel = RELAY_ACTIVE_LOW ? (!state) : state;
+    digitalWrite(pin, pinLevel ? HIGH : LOW);
+    if (socket == 1) relay1State = state;
+    if (socket == 2) relay2State = state;
+}
+
+// Forward declarations
+void printLcdLine(uint8_t row, const char* text);
+void showLcdAlert(const char* type);
+void updateLcd(unsigned long now);
+void checkWifiAndMqtt(unsigned long now);
+void connectMqtt();
+void mqttCallback(char* topic, byte* payload, unsigned int length);
+void processSwitchCommand(int socketNumber, const char* stateStr);
+void processThresholdCommand(float v_max, float c_max, float t_max, float s_max);
+void processReconnectCommand();
+float readTemperature();
+float readSmokePPM();
+float sanitizeReading(float value);
+void readAllSensors();
+void publishTelemetry();
+void evaluateThresholds();
+void sendAlert(const char* type, float value, float threshold, const char* action, int socketNumber = 0);
+String buildStatusPayload(bool online);
+void publishStatus(bool online);
+void loadSavedThresholds();
+void saveThresholds();
 
 // ============================================================================
 //  SETUP
 // ============================================================================
 void setup() {
     Serial.begin(115200);
-    delay(200);
+    delay(250);
+    Serial.println("\n=======================================================");
+    Serial.println("  Smart Socket ESP32 Firmware v" FIRMWARE_VERSION);
+    Serial.println("=======================================================");
 
-    // Build topik
+    // 1. Inisialisasi Pin Relay terlebih dahulu (Cegah glitch klik saat boot)
+    digitalWrite(RELAY1_PIN, RELAY_ACTIVE_LOW ? HIGH : LOW);
+    pinMode(RELAY1_PIN, OUTPUT);
+    digitalWrite(RELAY2_PIN, RELAY_ACTIVE_LOW ? HIGH : LOW);
+    pinMode(RELAY2_PIN, OUTPUT);
+    relay1State = false;
+    relay2State = false;
+
+    // 2. Muat batas proteksi dari memori Flash (NVS)
+    loadSavedThresholds();
+
+    // 3. Konfigurasi ADC ESP32 untuk pembacaan analog akurat MQ-2
+    analogReadResolution(12);
+    analogSetPinAttenuation(MQ2_PIN, ADC_11db);
+
+    // 4. Inisialisasi I2C Wire untuk LCD 16x2 dengan Timeout anti-lockup
+    Wire.begin(LCD_I2C_SDA, LCD_I2C_SCL);
+#if defined(ESP_ARDUINO_VERSION_MAJOR) && (ESP_ARDUINO_VERSION_MAJOR >= 3)
+    Wire.setTimeout(100);
+#else
+    Wire.setTimeOut(100);
+#endif
+    Wire.setClock(100000); // 100 kHz standard mode
+
+    lcd.init();
+    lcd.backlight();
+    lcd.createChar(1, (uint8_t*)customCharDegree);
+
+    printLcdLine(0, " SMART SOCKET ");
+    printLcdLine(1, " MEMULAI SISTEM");
+
+    // 5. Build topik MQTT dinamis berbasis UID perangkat
     TOPIC_TELEMETRY = String("smartsocket/") + DEVICE_UID + "/telemetry";
     TOPIC_STATUS    = String("smartsocket/") + DEVICE_UID + "/status";
     TOPIC_ALERT     = String("smartsocket/") + DEVICE_UID + "/alert";
@@ -113,28 +248,52 @@ void setup() {
     TOPIC_THRESHOLD = String("smartsocket/") + DEVICE_UID + "/command/threshold";
     TOPIC_RECONNECT = String("smartsocket/") + DEVICE_UID + "/command/reconnect";
 
-    // Init Relay (LOW = OFF tergantung modul relay, sesuaikan logika)
-    pinMode(RELAY1_PIN, OUTPUT);
-    pinMode(RELAY2_PIN, OUTPUT);
-    digitalWrite(RELAY1_PIN, LOW);
-    digitalWrite(RELAY2_PIN, LOW);
-
-    // Init PZEM-004T
+    // 6. Inisialisasi HardwareSerial PZEM-004T v3.0
     PZEMSerial1.begin(9600, SERIAL_8N1, PZEM1_RX, PZEM1_TX);
     PZEMSerial2.begin(9600, SERIAL_8N1, PZEM2_RX, PZEM2_TX);
 
-    // Init DS18B20
+    // 7. Inisialisasi Sensor Suhu OneWire DS18B20 secara asinkron (non-blocking)
     sensors.begin();
+    sensors.setWaitForConversion(false);
+    sensors.requestTemperatures();
 
-    // Init WiFi
-    connectWiFi();
+    // 8. Inisialisasi WiFi
+    WiFi.mode(WIFI_STA);
+    WiFi.setAutoReconnect(true);
+    WiFi.begin(WIFI_SSID, WIFI_PASS);
+    Serial.print("[WiFi] Menghubungkan ke ");
+    Serial.println(WIFI_SSID);
+    printLcdLine(0, "WiFi");
+    printLcdLine(1, "Menghubungkan...");
 
-    // Init MQTT (TLS tanpa verifikasi CA — untuk produksi sebaiknya pakai CA cert)
-    wifiClient.setInsecure();
+    unsigned long start = millis();
+    while (WiFi.status() != WL_CONNECTED && millis() - start < 8000) {
+        delay(250);
+        Serial.print(".");
+    }
+    Serial.println();
+
+    if (WiFi.status() == WL_CONNECTED) {
+        Serial.print("[WiFi] Terhubung. IP: ");
+        Serial.println(WiFi.localIP());
+        printLcdLine(0, "WiFi Terhubung");
+        printLcdLine(1, WiFi.localIP().toString().c_str());
+        delay(600);
+    } else {
+        Serial.println("[WiFi] Belum terhubung. Melanjutkan dalam mode mandiri...");
+        printLcdLine(0, "WiFi Belum Konek");
+        printLcdLine(1, "Mode Mandiri");
+        delay(600);
+    }
+
+    // 9. Konfigurasi MQTT TLS HiveMQ Cloud
+    wifiClient.setInsecure(); // Mengabaikan validasi root CA untuk efisiensi RAM ESP32
     mqttClient.setServer(MQTT_HOST, MQTT_PORT);
-    mqttClient.setBufferSize(1024);
+    mqttClient.setBufferSize(1024); // Alokasi buffer paket MQTT aman untuk JSON
     mqttClient.setCallback(mqttCallback);
     mqttClient.setKeepAlive(30);
+
+    Serial.println("[System] Setup selesai. Menjalankan pemantauan background...");
 }
 
 // ============================================================================
@@ -143,318 +302,581 @@ void setup() {
 void loop() {
     unsigned long now = millis();
 
-    // Pastikan WiFi & MQTT terkoneksi
-    if (!mqttClient.connected()) {
-        ensureMqttConnected();
-    }
-    mqttClient.loop();
+    // 1. Pemeliharaan Koneksi WiFi & MQTT (Asinkron & Non-blocking)
+    checkWifiAndMqtt(now);
 
-    // Kirim telemetri berkala
+    // 2. Pembacaan Sensor & Evaluasi Ambang Batas Keamanan (Setiap 1 detik)
+    if (now - lastSensorReadMs >= SENSOR_READ_INTERVAL_MS) {
+        lastSensorReadMs = now;
+        readAllSensors();
+        evaluateThresholds();
+    }
+
+    // 3. Publish Telemetri ke Backend Laravel (Setiap 5 detik)
     if (now - lastTelemetryMs >= TELEMETRY_INTERVAL_MS) {
         lastTelemetryMs = now;
         publishTelemetry();
     }
 
-    // Publish status online berkala
+    // 4. Publish Heartbeat Status (Setiap 30 detik)
     if (now - lastStatusMs >= STATUS_INTERVAL_MS) {
         lastStatusMs = now;
         publishStatus(true);
     }
+
+    // 5. Update Multi-Page Insight Layar LCD 16x2
+    updateLcd(now);
 }
 
 // ============================================================================
-//  WIFI
+//  PEMELIHARAAN KONEKSI (WIFI & MQTT NON-BLOCKING)
 // ============================================================================
-void connectWiFi() {
-    Serial.print("[WiFi] Menghubungkan ke ");
-    Serial.println(WIFI_SSID);
-    WiFi.mode(WIFI_STA);
-    WiFi.begin(WIFI_SSID, WIFI_PASS);
-
-    unsigned long start = millis();
-    while (WiFi.status() != WL_CONNECTED && millis() - start < 20000) {
-        delay(500);
-        Serial.print(".");
-    }
-
-    if (WiFi.status() == WL_CONNECTED) {
-        Serial.println();
-        Serial.print("[WiFi] Terhubung. IP: ");
-        Serial.println(WiFi.localIP());
-    } else {
-        Serial.println();
-        Serial.println("[WiFi] Gagal terhubung, mencoba ulang...");
-    }
-}
-
-// ============================================================================
-//  MQTT
-// ============================================================================
-void ensureMqttConnected() {
+void checkWifiAndMqtt(unsigned long now) {
+    // A. Periksa WiFi
     if (WiFi.status() != WL_CONNECTED) {
-        connectWiFi();
-        return;
+        if (now - lastWifiRetryMs >= WIFI_RETRY_INTERVAL_MS) {
+            lastWifiRetryMs = now;
+            Serial.println("[WiFi] Mencoba menghubungkan kembali ke jaringan...");
+            WiFi.disconnect();
+            WiFi.begin(WIFI_SSID, WIFI_PASS);
+        }
+        return; // Jangan coba MQTT jika WiFi belum tersambung
     }
 
-    if (mqttClient.connected()) {
-        return;
+    // B. Periksa MQTT
+    if (!mqttClient.connected()) {
+        if (now - lastMqttRetryMs >= MQTT_RECONNECT_MS) {
+            lastMqttRetryMs = now;
+            connectMqtt();
+        }
+    } else {
+        mqttClient.loop();
     }
+}
 
-    unsigned long now = millis();
-    if (now - lastReconnectMs < RECONNECT_INTERVAL_MS) {
-        return;
-    }
-    lastReconnectMs = now;
+void connectMqtt() {
+    // Generate Client ID unik berbasis MAC Address untuk mencegah disconnect collision di broker
+    String uniqueClientId = String(MQTT_CLIENT_ID) + "_" + DEVICE_UID + "_" + String((uint32_t)ESP.getEfuseMac(), HEX);
 
     Serial.print("[MQTT] Menghubungkan ke ");
     Serial.print(MQTT_HOST);
     Serial.print(":");
     Serial.println(MQTT_PORT);
 
-    // LWT: kirim "offline" jika perangkat putus koneksi secara tidak normal
+    // LWT: kirim "offline" jika perangkat putus koneksi secara tiba-tiba
     String lwtPayload = String("{\"device_id\":\"") + DEVICE_UID + "\",\"status\":\"offline\"}";
     String statusPayload = buildStatusPayload(true);
 
-    if (mqttClient.connect(MQTT_CLIENT_ID, MQTT_USER, MQTT_PASS,
+    if (mqttClient.connect(uniqueClientId.c_str(), MQTT_USER, MQTT_PASS,
                            TOPIC_STATUS.c_str(), 1, true, lwtPayload.c_str())) {
-        Serial.println("[MQTT] Terhubung.");
+        Serial.println("[MQTT] Berhasil Terhubung ke HiveMQ Cloud Broker.");
+        printLcdLine(0, "MQTT Terhubung");
+        printLcdLine(1, "Sinkronisasi...");
 
-        // Subscribe perintah dari backend
+        // Subscribe perintah dari backend Laravel
         mqttClient.subscribe(TOPIC_SWITCH.c_str(), 1);
         mqttClient.subscribe(TOPIC_THRESHOLD.c_str(), 1);
         mqttClient.subscribe(TOPIC_RECONNECT.c_str(), 1);
 
-        // Publish status online (retain)
+        // Publish status online dengan retain flag
         mqttClient.publish(TOPIC_STATUS.c_str(), statusPayload.c_str(), true);
     } else {
-        Serial.print("[MQTT] Gagal. RC=");
+        Serial.print("[MQTT] Gagal terhubung. Kode Error=");
         Serial.println(mqttClient.state());
-    }
-}
-
-void mqttCallback(char* topic, byte* payload, unsigned int length) {
-    String topicStr = String(topic);
-    String payloadStr;
-    for (unsigned int i = 0; i < length; i++) {
-        payloadStr += (char)payload[i];
-    }
-
-    Serial.println("[MQTT] Pesan masuk: " + topicStr + " => " + payloadStr);
-
-    StaticJsonDocument<512> doc;
-    DeserializationError err = deserializeJson(doc, payloadStr);
-    if (err) {
-        Serial.println("[MQTT] JSON tidak valid, diabaikan.");
-        return;
-    }
-
-    if (topicStr == TOPIC_SWITCH) {
-        handleSwitchCommand(doc);
-    } else if (topicStr == TOPIC_THRESHOLD) {
-        handleThresholdCommand(doc);
-    } else if (topicStr == TOPIC_RECONNECT) {
-        handleReconnectCommand(doc);
+        char mqttError[17];
+        snprintf(mqttError, sizeof(mqttError), "MQTT Err: %d", mqttClient.state());
+        printLcdLine(0, "MQTT Putus");
+        printLcdLine(1, mqttError);
     }
 }
 
 // ============================================================================
-//  HANDLER PERINTAH MQTT
+//  PENYIMPANAN FLASH NON-VOLATILE (NVS PREFERENCES)
 // ============================================================================
-void handleSwitchCommand(JsonDocument& doc) {
-    int socketNumber = doc["socket_number"] | 0;
-    String state = doc["state"] | "OFF";
-    state.toUpperCase();
+void loadSavedThresholds() {
+    preferences.begin("smartsocket", false);
+    thresholds.max_voltage     = preferences.getFloat("v_max", 245.0f);
+    thresholds.max_current     = preferences.getFloat("c_max", 15.5f);
+    thresholds.max_temperature = preferences.getFloat("t_max", 65.0f);
+    thresholds.max_smoke_ppm   = preferences.getFloat("s_max", 995.0f);
+    preferences.end();
 
-    bool turnOn = (state == "ON");
-
-    if (socketNumber == 1) {
-        relay1State = turnOn;
-        digitalWrite(RELAY1_PIN, turnOn ? HIGH : LOW);
-        Serial.printf("[Relay] Socket 1 => %s\n", turnOn ? "ON" : "OFF");
-    } else if (socketNumber == 2) {
-        relay2State = turnOn;
-        digitalWrite(RELAY2_PIN, turnOn ? HIGH : LOW);
-        Serial.printf("[Relay] Socket 2 => %s\n", turnOn ? "ON" : "OFF");
+    // Validasi nilai dari flash jika sebelumnya kosong atau data acak
+    if (isnan(thresholds.max_voltage) || thresholds.max_voltage <= 50.0f || thresholds.max_voltage > 300.0f) {
+        thresholds.max_voltage = 245.0f;
     }
-}
+    if (isnan(thresholds.max_current) || thresholds.max_current <= 0.5f || thresholds.max_current > 100.0f) {
+        thresholds.max_current = 15.5f;
+    }
+    if (isnan(thresholds.max_temperature) || thresholds.max_temperature <= 10.0f || thresholds.max_temperature > 120.0f) {
+        thresholds.max_temperature = 65.0f;
+    }
+    if (isnan(thresholds.max_smoke_ppm) || thresholds.max_smoke_ppm <= 50.0f || thresholds.max_smoke_ppm > 5000.0f) {
+        thresholds.max_smoke_ppm = 995.0f;
+    }
 
-void handleThresholdCommand(JsonDocument& doc) {
-    if (doc.containsKey("max_voltage"))     thresholds.max_voltage     = doc["max_voltage"];
-    if (doc.containsKey("max_current"))     thresholds.max_current     = doc["max_current"];
-    if (doc.containsKey("max_temperature")) thresholds.max_temperature = doc["max_temperature"];
-    if (doc.containsKey("max_smoke_ppm"))   thresholds.max_smoke_ppm   = doc["max_smoke_ppm"];
-
-    Serial.println("[Threshold] Diperbarui:");
-    Serial.printf("  max_voltage=%.1f max_current=%.1f max_temperature=%.1f max_smoke_ppm=%.1f\n",
+    Serial.println("[NVS] Ambang batas keamanan berhasil dimuat dari Flash:");
+    Serial.printf("  Voltage=%.1fV, Current=%.1fA, Temp=%.1fC, Smoke=%.0f ppm\n",
                   thresholds.max_voltage, thresholds.max_current,
                   thresholds.max_temperature, thresholds.max_smoke_ppm);
 }
 
-void handleReconnectCommand(JsonDocument& doc) {
-    Serial.println("[WiFi] Perintah rekoneksi diterima.");
-    publishStatus(false);           // beri tahu offline sebentar
-    WiFi.disconnect();
-    delay(500);
-    connectWiFi();
+void saveThresholds() {
+    preferences.begin("smartsocket", false);
+    preferences.putFloat("v_max", thresholds.max_voltage);
+    preferences.putFloat("c_max", thresholds.max_current);
+    preferences.putFloat("t_max", thresholds.max_temperature);
+    preferences.putFloat("s_max", thresholds.max_smoke_ppm);
+    preferences.end();
+    Serial.println("[NVS] Ambang batas keamanan berhasil disimpan ke Flash!");
 }
 
 // ============================================================================
-//  PEMBACAAN SENSOR
+//  LCD 16x2 I2C MULTI-PAGE INSIGHT VIEW
+// ============================================================================
+void printLcdLine(uint8_t row, const char* text) {
+    char padded[LCD_COLUMNS + 1];
+    snprintf(padded, sizeof(padded), "%-16.16s", text);
+    lcd.setCursor(0, row);
+    lcd.print(padded);
+}
+
+void showLcdAlert(const char* type) {
+    lcd.clear();
+    printLcdLine(0, "! ALARM TRIP !");
+    if (strcmp(type, "OVER_CURRENT") == 0) {
+        printLcdLine(1, "OVERLOAD BEBAN");
+    } else if (strcmp(type, "OVER_VOLTAGE") == 0) {
+        printLcdLine(1, "TEGANGAN TINGGI");
+    } else if (strcmp(type, "OVER_TEMPERATURE") == 0) {
+        printLcdLine(1, "SUHU TINGGI BOX");
+    } else if (strcmp(type, "SMOKE_DETECTED") == 0) {
+        printLcdLine(1, "BAHAYA ASAP MQ2");
+    } else if (strcmp(type, "TRIP LOCKOUT") == 0) {
+        printLcdLine(1, "KUNCI TRIP AKTIF");
+    } else {
+        printLcdLine(1, type);
+    }
+    lcdAlertUntilMs = millis() + 4500; // Tahan tampilan darurat selama 4,5 detik
+}
+
+void updateLcd(unsigned long now) {
+    // Jika sedang dalam masa penahanan alert darurat, jangan ubah tampilan
+    if (now < lcdAlertUntilMs) {
+        return;
+    }
+
+    // Rotasi halaman sesuai interval (2,5 detik per halaman)
+    if (now - lastLcdPageMs < LCD_PAGE_INTERVAL_MS) {
+        return;
+    }
+
+    lastLcdPageMs = now;
+    char line1[LCD_COLUMNS + 1];
+    char line2[LCD_COLUMNS + 1];
+
+    switch (lcdPage) {
+        case 0: // INSIGHT 1: Status Jaringan & Broker MQTT
+            snprintf(line1, sizeof(line1), "WiFi:%-3s RSSI:%3d",
+                     WiFi.status() == WL_CONNECTED ? "OK" : "OFF",
+                     WiFi.status() == WL_CONNECTED ? WiFi.RSSI() : 0);
+            snprintf(line2, sizeof(line2), "MQTT:%-11s",
+                     mqttClient.connected() ? "TERHUBUNG" : "OFFLINE");
+            break;
+
+        case 1: // INSIGHT 2: Realtime Soket 1 (Relay, V, I, P)
+            snprintf(line1, sizeof(line1), "S1[%-3s] %5.1fV",
+                     relay1State ? "ON " : "OFF", latestSensor.voltage1);
+            snprintf(line2, sizeof(line2), "%4.2fA %5.1fW",
+                     latestSensor.current1, latestSensor.power1);
+            break;
+
+        case 2: // INSIGHT 3: Realtime Soket 2 (Relay, V, I, P)
+            snprintf(line1, sizeof(line1), "S2[%-3s] %5.1fV",
+                     relay2State ? "ON " : "OFF", latestSensor.voltage2);
+            snprintf(line2, sizeof(line2), "%4.2fA %5.1fW",
+                     latestSensor.current2, latestSensor.power2);
+            break;
+
+        case 3: // INSIGHT 4: Total Beban Daya & Akumulasi Energi
+            snprintf(line1, sizeof(line1), "TOT P:%6.1f W",
+                     latestSensor.power1 + latestSensor.power2);
+            snprintf(line2, sizeof(line2), "TOT E:%6.3fkWh",
+                     latestSensor.energy1 + latestSensor.energy2);
+            break;
+
+        case 4: // INSIGHT 5: Kualitas Daya Listrik (Frekuensi & Faktor Daya)
+            snprintf(line1, sizeof(line1), "FREQ: %4.1f Hz",
+                     latestSensor.freq1 > 0 ? latestSensor.freq1 : (latestSensor.freq2 > 0 ? latestSensor.freq2 : 50.0f));
+            snprintf(line2, sizeof(line2), "PF1:%.2f PF2:%.2f",
+                     latestSensor.pf1, latestSensor.pf2);
+            break;
+
+        case 5: // INSIGHT 6: Keselamatan Enclosure (Suhu DS18B20 & Asap MQ-2)
+            snprintf(line1, sizeof(line1), "SUHU: %4.1f%cC",
+                     latestSensor.temperature, '\x01');
+            snprintf(line2, sizeof(line2), "ASAP: %4.0f PPM",
+                     latestSensor.smokePpm);
+            break;
+
+        case 6: // INSIGHT 7: Status Proteksi & Saklar Sistem
+            snprintf(line1, sizeof(line1), "PROTEKSI:%-7s",
+                     latestSensor.isTripped ? "TRIP!" : "NORMAL");
+            snprintf(line2, sizeof(line2), "R1:%-3s | R2:%-3s",
+                     relay1State ? "ON" : "OFF",
+                     relay2State ? "ON" : "OFF");
+            break;
+
+        default:
+            lcdPage = 0;
+            return;
+    }
+
+    printLcdLine(0, line1);
+    printLcdLine(1, line2);
+
+    // Rotasi ke insight berikutnya (0 sampai 6)
+    lcdPage = (lcdPage + 1) % 7;
+}
+
+// ============================================================================
+//  CALLBACK & HANDLER PERINTAH MQTT
+// ============================================================================
+void mqttCallback(char* topic, byte* payload, unsigned int length) {
+    String topicStr = String(topic);
+    String payloadStr;
+    payloadStr.reserve(length + 1);
+    for (unsigned int i = 0; i < length; i++) {
+        payloadStr += (char)payload[i];
+    }
+
+    Serial.println("[MQTT] Pesan Masuk [" + topicStr + "]: " + payloadStr);
+
+    ALLOC_JSON_DOC(doc, 512);
+    DeserializationError err = deserializeJson(doc, payloadStr);
+    if (err) {
+        Serial.print("[MQTT] JSON parse gagal: ");
+        Serial.println(err.c_str());
+        return;
+    }
+
+    if (topicStr == TOPIC_SWITCH) {
+        int socketNumber = doc["socket_number"] | 0;
+        const char* stateStr = doc["state"] | "OFF";
+        processSwitchCommand(socketNumber, stateStr);
+    } else if (topicStr == TOPIC_THRESHOLD) {
+        processThresholdCommand(
+            doc["max_voltage"]     | thresholds.max_voltage,
+            doc["max_current"]     | thresholds.max_current,
+            doc["max_temperature"] | thresholds.max_temperature,
+            doc["max_smoke_ppm"]   | thresholds.max_smoke_ppm
+        );
+    } else if (topicStr == TOPIC_RECONNECT) {
+        processReconnectCommand();
+    }
+}
+
+void processSwitchCommand(int socketNumber, const char* stateStr) {
+    String state = String(stateStr);
+    state.toUpperCase();
+    bool turnOn = (state == "ON");
+
+    // Jika sistem masih dalam kondisi bahaya aktif (misal asap tinggi/overvoltage), tolak switch ON
+    if (turnOn && latestSensor.isTripped) {
+        Serial.println("[Relay] PERINGATAN: Perintah ON ditolak karena sistem proteksi sedang aktif!");
+        showLcdAlert("TRIP LOCKOUT");
+        publishTelemetry(); // Perbarui web agar toggle switch kembali sinkron ke OFF
+        return;
+    }
+
+    if (socketNumber == 1) {
+        setRelayOutput(1, turnOn);
+        Serial.printf("[Relay] Socket 1 => %s\n", turnOn ? "ON" : "OFF");
+    } else if (socketNumber == 2) {
+        setRelayOutput(2, turnOn);
+        Serial.printf("[Relay] Socket 2 => %s\n", turnOn ? "ON" : "OFF");
+    }
+
+    // Segera publish telemetri agar dashboard web update instan (< 100ms)
+    publishTelemetry();
+    updateLcd(millis());
+}
+
+void processThresholdCommand(float v_max, float c_max, float t_max, float s_max) {
+    if (v_max > 0) thresholds.max_voltage = v_max;
+    if (c_max > 0) thresholds.max_current = c_max;
+    if (t_max > 0) thresholds.max_temperature = t_max;
+    if (s_max > 0) thresholds.max_smoke_ppm = s_max;
+
+    Serial.println("[Threshold] Nilai batas proteksi diperbarui dari web:");
+    Serial.printf("  Voltage=%.1fV, Current=%.1fA, Temp=%.1fC, Smoke=%.0f ppm\n",
+                  thresholds.max_voltage, thresholds.max_current,
+                  thresholds.max_temperature, thresholds.max_smoke_ppm);
+
+    saveThresholds();
+}
+
+void processReconnectCommand() {
+    Serial.println("[WiFi] Perintah rekoneksi diterima dari dashboard.");
+    publishStatus(false);
+    WiFi.disconnect();
+    lastWifiRetryMs = millis();
+    WiFi.begin(WIFI_SSID, WIFI_PASS);
+}
+
+// ============================================================================
+//  PEMBACAAN SENSOR (PZEM, DS18B20, MQ-2)
 // ============================================================================
 float readTemperature() {
-    sensors.requestTemperatures();
     float t = sensors.getTempCByIndex(0);
-    // DallasTemperature mengembalikan -127 jika sensor tidak terdeteksi
-    if (t == DEVICE_DISCONNECTED_C || t < -55.0f || t > 125.0f) {
+    // Request konversi asinkron untuk pembacaan siklus berikutnya (0ms blocking)
+    sensors.requestTemperatures();
+
+    // Validasi nilai sensor DS18B20 (-127 = disconnected)
+    if (t == DEVICE_DISCONNECTED_C || t < -55.0f || t > 125.0f || isnan(t)) {
         return 0.0f;
     }
     return t;
 }
 
 float readSmokePPM() {
-    int raw = analogRead(MQ2_PIN);
-    // Konversi kasar ADC -> PPM (perlu kalibrasi sesuai MQ-2 + beban)
-    // Nilai ini adalah contoh; sesuaikan dengan kurva kalibrasi sensor Anda.
-    float ppm = map(raw, 0, 4095, 0, 1000);
+    // Multi-sampling 10 kali untuk meredam noise ADC ESP32
+    long sum = 0;
+    for (int i = 0; i < 10; i++) {
+        sum += analogRead(MQ2_PIN);
+        delayMicroseconds(150);
+    }
+    float raw = (float)sum / 10.0f;
+
+    // Kalibrasi standar MQ-2: Konversi 12-bit ADC (0-4095) ke 0-2000 ppm
+    float ppm = (raw / 4095.0f) * 2000.0f;
+    if (ppm < 0.0f) ppm = 0.0f;
     return ppm;
+}
+
+float sanitizeReading(float value) {
+    return (isnan(value) || isinf(value) || value < 0.0f) ? 0.0f : value;
+}
+
+void readAllSensors() {
+    // 1. Baca sensor PZEM 1 (Soket 1)
+    // Optimasi: jika voltage gagal / 0, skip metrik lainnya agar tidak kena serial delay
+    float v1 = sanitizeReading(pzem1.voltage());
+    float c1 = 0, p1 = 0, e1 = 0, f1 = 0, pf1 = 0;
+    if (v1 > 0) {
+        c1 = sanitizeReading(pzem1.current());
+        p1 = sanitizeReading(pzem1.power());
+        e1 = sanitizeReading(pzem1.energy());
+        f1 = sanitizeReading(pzem1.frequency());
+        pf1 = sanitizeReading(pzem1.pf());
+    }
+
+    // 2. Baca sensor PZEM 2 (Soket 2)
+    float v2 = sanitizeReading(pzem2.voltage());
+    float c2 = 0, p2 = 0, e2 = 0, f2 = 0, pf2 = 0;
+    if (v2 > 0) {
+        c2 = sanitizeReading(pzem2.current());
+        p2 = sanitizeReading(pzem2.power());
+        e2 = sanitizeReading(pzem2.energy());
+        f2 = sanitizeReading(pzem2.frequency());
+        pf2 = sanitizeReading(pzem2.pf());
+    }
+
+    // 3. Suhu Enclosure DS18B20 & Asap MQ-2
+    float temp  = readTemperature();
+    float smoke = readSmokePPM();
+
+    latestSensor.voltage1    = v1;
+    latestSensor.current1    = c1;
+    latestSensor.power1      = p1;
+    latestSensor.energy1     = e1;
+    latestSensor.freq1       = f1;
+    latestSensor.pf1         = pf1;
+
+    latestSensor.voltage2    = v2;
+    latestSensor.current2    = c2;
+    latestSensor.power2      = p2;
+    latestSensor.energy2     = e2;
+    latestSensor.freq2       = f2;
+    latestSensor.pf2         = pf2;
+
+    latestSensor.temperature = temp;
+    latestSensor.smokePpm    = smoke;
 }
 
 // ============================================================================
 //  PUBLISH TELEMETRI
 // ============================================================================
 void publishTelemetry() {
-    // Baca sensor PZEM (gunakan -1 jika gagal)
-    float v1 = pzem1.voltage();
-    float c1 = pzem1.current();
-    float p1 = pzem1.power();
-    float e1 = pzem1.energy();
-    float f1 = pzem1.frequency();
-    float pf1 = pzem1.pf();
-
-    float v2 = pzem2.voltage();
-    float c2 = pzem2.current();
-    float p2 = pzem2.power();
-    float e2 = pzem2.energy();
-    float f2 = pzem2.frequency();
-    float pf2 = pzem2.pf();
-
-    float temp = readTemperature();
-    float smoke = readSmokePPM();
-
-    // Buat payload JSON sesuai format backend
-    StaticJsonDocument<1024> doc;
+    // Buat payload JSON sesuai format baku backend Laravel (kompatibel ArduinoJson v6 & v7)
+    ALLOC_JSON_DOC(doc, 1024);
     doc["device_id"] = DEVICE_UID;
-    doc["timestamp"] = (uint32_t)(millis() / 1000); // atau pakai epoch via NTP
+    doc["timestamp"] = (uint32_t)(millis() / 1000);
 
-    JsonObject env = doc.createNestedObject("environmental");
-    env["temperature"] = temp;
-    env["smoke_ppm"] = smoke;
+    doc["environmental"]["temperature"] = latestSensor.temperature;
+    doc["environmental"]["smoke_ppm"]    = latestSensor.smokePpm;
 
-    JsonObject sockets = doc.createNestedObject("sockets");
+    doc["sockets"]["socket_1"]["relay_state"]  = relay1State ? "ON" : "OFF";
+    doc["sockets"]["socket_1"]["voltage"]      = latestSensor.voltage1;
+    doc["sockets"]["socket_1"]["current"]      = latestSensor.current1;
+    doc["sockets"]["socket_1"]["power"]        = latestSensor.power1;
+    doc["sockets"]["socket_1"]["energy"]       = latestSensor.energy1;
+    doc["sockets"]["socket_1"]["frequency"]    = latestSensor.freq1;
+    doc["sockets"]["socket_1"]["power_factor"] = latestSensor.pf1;
 
-    JsonObject s1 = sockets.createNestedObject("socket_1");
-    s1["relay_state"] = relay1State ? "ON" : "OFF";
-    s1["voltage"] = v1;
-    s1["current"] = c1;
-    s1["power"] = p1;
-    s1["energy"] = e1;
-    s1["frequency"] = f1;
-    s1["power_factor"] = pf1;
-
-    JsonObject s2 = sockets.createNestedObject("socket_2");
-    s2["relay_state"] = relay2State ? "ON" : "OFF";
-    s2["voltage"] = v2;
-    s2["current"] = c2;
-    s2["power"] = p2;
-    s2["energy"] = e2;
-    s2["frequency"] = f2;
-    s2["power_factor"] = pf2;
+    doc["sockets"]["socket_2"]["relay_state"]  = relay2State ? "ON" : "OFF";
+    doc["sockets"]["socket_2"]["voltage"]      = latestSensor.voltage2;
+    doc["sockets"]["socket_2"]["current"]      = latestSensor.current2;
+    doc["sockets"]["socket_2"]["power"]        = latestSensor.power2;
+    doc["sockets"]["socket_2"]["energy"]       = latestSensor.energy2;
+    doc["sockets"]["socket_2"]["frequency"]    = latestSensor.freq2;
+    doc["sockets"]["socket_2"]["power_factor"] = latestSensor.pf2;
 
     char buffer[1024];
-    size_t n = serializeJson(doc, buffer);
+    serializeJson(doc, buffer);
 
     if (mqttClient.connected()) {
-        mqttClient.publish(TOPIC_TELEMETRY.c_str(), buffer, n);
+        // Publish telemetri TANPA retain flag
+        mqttClient.publish(TOPIC_TELEMETRY.c_str(), buffer, false);
         Serial.print("[Telemetri] ");
         Serial.println(buffer);
     }
-
-    // Evaluasi threshold -> kirim alert + auto cutoff
-    evaluateThresholds(v1, v2, c1, c2, temp, smoke);
 }
 
 // ============================================================================
-//  EVALUASI THRESHOLD & ALERT
+//  EVALUASI THRESHOLD & ALERT (DENGAN FLOOD PROTECTION & TRIP GRANULAR)
 // ============================================================================
-void evaluateThresholds(float v1, float v2, float c1, float c2, float temp, float smoke) {
-    bool cutoff = false;
+void evaluateThresholds() {
+    float v1    = latestSensor.voltage1;
+    float v2    = latestSensor.voltage2;
+    float c1    = latestSensor.current1;
+    float c2    = latestSensor.current2;
+    float temp  = latestSensor.temperature;
+    float smoke = latestSensor.smokePpm;
 
-    // Over voltage
-    if (thresholds.max_voltage > 0 && (v1 >= thresholds.max_voltage || v2 >= thresholds.max_voltage)) {
-        float worst = max(v1, v2);
-        sendAlert("OVER_VOLTAGE", worst, thresholds.max_voltage, "AUTO_CUTOFF_SOCKET_1_AND_2");
-        cutoff = true;
+    unsigned long now = millis();
+    bool canSendAlert = (now - lastAlertSentMs >= ALERT_COOLDOWN_MS);
+
+    bool tripSocket1 = false;
+    bool tripSocket2 = false;
+
+    // 1. Over Voltage (Tegangan Berlebih PLN) -> Matikan kedua soket
+    if (thresholds.max_voltage > 0) {
+        if (v1 >= thresholds.max_voltage || v2 >= thresholds.max_voltage) {
+            float worstV = (v1 >= thresholds.max_voltage) ? v1 : v2;
+            int tripSocket = (v1 >= thresholds.max_voltage && v2 >= thresholds.max_voltage) ? 0 : ((v1 >= thresholds.max_voltage) ? 1 : 2);
+            tripSocket1 = true;
+            tripSocket2 = true;
+            if (canSendAlert || lastAlertSentType != "OVER_VOLTAGE") {
+                sendAlert("OVER_VOLTAGE", worstV, thresholds.max_voltage, "AUTO_CUTOFF_ALL", tripSocket);
+                lastAlertSentMs = now;
+                lastAlertSentType = "OVER_VOLTAGE";
+            }
+        }
     }
 
-    // Over current
-    if (thresholds.max_current > 0 && (c1 >= thresholds.max_current || c2 >= thresholds.max_current)) {
-        float worst = max(c1, c2);
-        sendAlert("OVER_CURRENT", worst, thresholds.max_current, "AUTO_CUTOFF_SOCKET_1_AND_2");
-        cutoff = true;
+    // 2. Over Current (Arus Beban Berlebih) -> Matikan soket yang overload
+    if (thresholds.max_current > 0) {
+        if (c1 >= thresholds.max_current) {
+            tripSocket1 = true;
+            if (canSendAlert || lastAlertSentType != "OVER_CURRENT_1") {
+                sendAlert("OVER_CURRENT", c1, thresholds.max_current, "AUTO_CUTOFF_SOCKET_1", 1);
+                lastAlertSentMs = now;
+                lastAlertSentType = "OVER_CURRENT_1";
+            }
+        }
+        if (c2 >= thresholds.max_current) {
+            tripSocket2 = true;
+            if (canSendAlert || lastAlertSentType != "OVER_CURRENT_2") {
+                sendAlert("OVER_CURRENT", c2, thresholds.max_current, "AUTO_CUTOFF_SOCKET_2", 2);
+                lastAlertSentMs = now;
+                lastAlertSentType = "OVER_CURRENT_2";
+            }
+        }
     }
 
-    // Over temperature
-    if (thresholds.max_temperature > 0 && temp >= thresholds.max_temperature) {
-        sendAlert("OVER_TEMPERATURE", temp, thresholds.max_temperature, "WARNING_LOGGED");
-    }
-
-    // Smoke detected
+    // 3. Smoke Detected (Asap / Gas MQ-2) -> Bahaya Kebakaran, Matikan SEMUA soket
     if (thresholds.max_smoke_ppm > 0 && smoke >= thresholds.max_smoke_ppm) {
-        sendAlert("SMOKE_DETECTED", smoke, thresholds.max_smoke_ppm, "EMERGENCY_ALERT");
-        cutoff = true;
+        tripSocket1 = true;
+        tripSocket2 = true;
+        if (canSendAlert || lastAlertSentType != "SMOKE_DETECTED") {
+            sendAlert("SMOKE_DETECTED", smoke, thresholds.max_smoke_ppm, "EMERGENCY_ALERT", 0);
+            lastAlertSentMs = now;
+            lastAlertSentType = "SMOKE_DETECTED";
+        }
     }
 
-    // Auto cutoff jika kondisi bahaya (voltase/arus/asap)
-    if (cutoff) {
-        relay1State = false;
-        relay2State = false;
-        digitalWrite(RELAY1_PIN, LOW);
-        digitalWrite(RELAY2_PIN, LOW);
-        Serial.println("[Safety] Relay 1 & 2 dimatikan otomatis.");
+    // 4. Over Temperature (Suhu Box Enclosure DS18B20)
+    if (thresholds.max_temperature > 0 && temp >= thresholds.max_temperature) {
+        if (temp >= thresholds.max_temperature + 10.0f) {
+            tripSocket1 = true;
+            tripSocket2 = true;
+        }
+        if (canSendAlert || lastAlertSentType != "OVER_TEMPERATURE") {
+            sendAlert("OVER_TEMPERATURE", temp, thresholds.max_temperature, "WARNING_LOGGED", 0);
+            lastAlertSentMs = now;
+            lastAlertSentType = "OVER_TEMPERATURE";
+        }
+    }
+
+    // Eksekusi pemutusan proteksi jika ada kondisi trip
+    if (tripSocket1) {
+        setRelayOutput(1, false);
+    }
+    if (tripSocket2) {
+        setRelayOutput(2, false);
+    }
+
+    if (tripSocket1 || tripSocket2) {
+        latestSensor.isTripped = true;
+        Serial.println("[Safety] Trip proteksi terpicu! Relay dimatikan.");
+        publishTelemetry();
+    } else {
+        // Reset trip lockout jika kondisi lingkungan telah normal
+        if (latestSensor.isTripped && temp < thresholds.max_temperature && smoke < thresholds.max_smoke_ppm) {
+            latestSensor.isTripped = false;
+            lastAlertSentType = "";
+        }
     }
 }
 
-void sendAlert(const char* type, float value, float threshold, const char* action) {
-    StaticJsonDocument<256> doc;
-    doc["device_id"] = DEVICE_UID;
-    doc["alert_type"] = type;
-    doc["value"] = value;
-    doc["threshold"] = threshold;
+void sendAlert(const char* type, float value, float threshold, const char* action, int socketNumber) {
+    showLcdAlert(type);
+
+    ALLOC_JSON_DOC(doc, 256);
+    doc["device_id"]    = DEVICE_UID;
+    doc["alert_type"]   = type;
+    doc["value"]        = value;
+    doc["threshold"]    = threshold;
     doc["action_taken"] = action;
-    doc["timestamp"] = (uint32_t)(millis() / 1000);
+    if (socketNumber > 0) {
+        doc["socket_number"] = socketNumber;
+    }
+    doc["timestamp"]    = (uint32_t)(millis() / 1000);
 
     char buffer[256];
-    size_t n = serializeJson(doc, buffer);
+    serializeJson(doc, buffer);
 
     if (mqttClient.connected()) {
-        mqttClient.publish(TOPIC_ALERT.c_str(), buffer, n);
+        // Publish alert tanpa retain flag agar tidak berulang saat subscriber baru join
+        mqttClient.publish(TOPIC_ALERT.c_str(), buffer, false);
         Serial.print("[Alert] ");
         Serial.println(buffer);
     }
 }
 
 // ============================================================================
-//  STATUS (LWT)
+//  STATUS (LWT & HEARTBEAT)
 // ============================================================================
 String buildStatusPayload(bool online) {
-    StaticJsonDocument<512> doc;
-    doc["device_id"] = DEVICE_UID;
-    doc["status"] = online ? "online" : "offline";
-    doc["ip_address"] = WiFi.localIP().toString();
-    doc["mac_address"] = WiFi.macAddress();
-    doc["wifi_rssi"] = WiFi.RSSI();
+    ALLOC_JSON_DOC(doc, 512);
+    doc["device_id"]        = DEVICE_UID;
+    doc["status"]           = online ? "online" : "offline";
+    doc["ip_address"]       = WiFi.status() == WL_CONNECTED ? WiFi.localIP().toString() : "0.0.0.0";
+    doc["mac_address"]      = WiFi.macAddress();
+    doc["wifi_rssi"]        = WiFi.status() == WL_CONNECTED ? WiFi.RSSI() : 0;
     doc["firmware_version"] = FIRMWARE_VERSION;
-    doc["timestamp"] = (uint32_t)(millis() / 1000);
+    doc["timestamp"]        = (uint32_t)(millis() / 1000);
 
     char buffer[512];
     serializeJson(doc, buffer);
@@ -464,6 +886,7 @@ String buildStatusPayload(bool online) {
 void publishStatus(bool online) {
     String payload = buildStatusPayload(online);
     if (mqttClient.connected()) {
+        // Status dipublish DENGAN retain flag (QoS 1, retain: true)
         mqttClient.publish(TOPIC_STATUS.c_str(), payload.c_str(), true);
         Serial.print("[Status] ");
         Serial.println(payload);

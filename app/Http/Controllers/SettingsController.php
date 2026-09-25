@@ -22,8 +22,24 @@ class SettingsController extends Controller
 
     public function index(Request $request): View
     {
-        $device = $request->user()->devices()->with('threshold')->firstOrFail();
-        $threshold = $device->threshold;
+        $device = $request->user()->devices()->with('threshold')->first();
+
+        if (! $device) {
+            $device = $request->user()->devices()->create([
+                'device_uid' => 'ESP32_SOCKET_01',
+                'name' => 'Smart Socket',
+                'status' => 'offline',
+                'wifi_rssi' => 0,
+            ]);
+        }
+
+        $threshold = $device->threshold ?: $device->threshold()->create([
+            'max_voltage' => 245,
+            'max_current' => 15.5,
+            'max_temperature' => 65,
+            'max_smoke_ppm' => 995,
+            'kwh_rate' => 1444.70,
+        ]);
 
         return view('settings', compact('device', 'threshold'));
     }

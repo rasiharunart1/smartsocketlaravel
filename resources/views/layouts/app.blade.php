@@ -7,6 +7,11 @@
 
     <title>@yield('title', 'Smart Socket') - Energy Monitoring System</title>
 
+    <!-- Google Fonts: Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
     <link rel="stylesheet" href="{{ asset('css/style.css') }}">
     <style>
         .user-dropdown {
@@ -138,12 +143,79 @@
             </div>
 
             <div class="topbar-right">
-                <!-- WiFi Status (Dynamic) -->
                 @php
+                    $alertsCount = $unreadAlertsCount ?? ($globalUnreadAlertsCount ?? 0);
+                    $notifList = $globalNotifications ?? [];
                     $activeDev = $device ?? ($globalDevice ?? null);
                     $isOnline = ($activeDev && $activeDev->status === 'online');
                 @endphp
-                <span class="top-icon" title="Status Jaringan: {{ $isOnline ? 'Terhubung (Online)' : 'Terputus (Offline)' }}" id="wifiStatusIcon" style="color: {{ $isOnline ? '#087c71' : '#8a96a7' }};">
+
+                <!-- 1. Notifikasi Status Alat & Alarms LCD (Interaktif Dropdown) -->
+                <div class="notif-dropdown" id="notifDropdown">
+                    <button type="button" class="top-icon notification-icon" id="notifToggleBtn" aria-label="Notifikasi Status Alat" aria-expanded="false" title="{{ $alertsCount }} Peringatan / Status Alat">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M18 9C18 5.69 15.31 3 12 3C8.69 3 6 5.69 6 9C6 16 3 16 3 18H21C21 16 18 16 18 9Z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+                            <path d="M10 21H14" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+                        </svg>
+                        @if($alertsCount > 0)
+                            <span class="notification-dot" id="topNotificationDot"></span>
+                        @endif
+                    </button>
+
+                    <div class="notif-menu" id="notifMenu">
+                        <div class="notif-header">
+                            <div class="notif-header-title">
+                                <span>Status Alat &amp; Peringatan</span>
+                                @if($alertsCount > 0)
+                                    <span class="notif-badge">{{ $alertsCount }} Alarm</span>
+                                @endif
+                            </div>
+                            <span class="notif-lcd-tag" title="Sesuai Tampilan Layar LCD Smart Socket">Status LCD</span>
+                        </div>
+
+                        <div class="notif-body" id="notifItemsList">
+                            @forelse($notifList as $item)
+                                <div class="notif-item {{ $item['type'] }} {{ $item['category'] }}">
+                                    <div class="notif-icon-box">
+                                        @if($item['type'] === 'alarm')
+                                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                                        @elseif($item['type'] === 'connection')
+                                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><circle cx="12" cy="20" r="1"/></svg>
+                                        @elseif($item['type'] === 'load')
+                                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                                        @else
+                                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                                        @endif
+                                    </div>
+                                    <div class="notif-content">
+                                        <div class="notif-title-row">
+                                            <h4 class="notif-title">{{ $item['title'] }}</h4>
+                                            <span class="notif-tag {{ $item['category'] }}">{{ $item['badge'] }}</span>
+                                        </div>
+                                        <p class="notif-msg">{{ $item['message'] }}</p>
+                                        <div class="notif-time">{{ $item['time'] }}</div>
+                                    </div>
+                                </div>
+                            @empty
+                                <div class="notif-empty">
+                                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="margin: 0 auto 8px; display: block;"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                                    <div>Semua kondisi normal &amp; aman.</div>
+                                    <small style="color: #94a3b8;">Tidak ada peringatan atau alarm aktif.</small>
+                                </div>
+                            @endforelse
+                        </div>
+
+                        <div class="notif-footer">
+                            <a href="{{ route('history') }}" class="notif-view-all">
+                                <span>Lihat Semua Riwayat Log &amp; Alarm</span>
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+                            </a>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 2. WiFi Status (Digeser ke kanan, berdampingan dengan Avatar) -->
+                <span class="top-icon wifi-status-icon" title="Status Jaringan ESP32: {{ $isOnline ? 'Terhubung (Online)' : 'Terputus (Offline)' }}" id="wifiStatusIcon" style="color: {{ $isOnline ? '#087c71' : '#8a96a7' }};">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                         <path d="M2.5 8.8C7.8 4.4 16.2 4.4 21.5 8.8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
                         <path d="M5.8 12.2C9.4 9.3 14.6 9.3 18.2 12.2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
@@ -152,21 +224,7 @@
                     </svg>
                 </span>
 
-                <!-- Notification Alert (Dynamic) -->
-                @php
-                    $alertsCount = $unreadAlertsCount ?? ($globalUnreadAlertsCount ?? 0);
-                @endphp
-                <a href="{{ route('history') }}" class="top-icon notification-icon" title="{{ $alertsCount }} Notifikasi Alarm Keamanan">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M18 9C18 5.69 15.31 3 12 3C8.69 3 6 5.69 6 9C6 16 3 16 3 18H21C21 16 18 16 18 9Z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
-                        <path d="M10 21H14" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
-                    </svg>
-                    @if($alertsCount > 0)
-                        <span class="notification-dot" id="topNotificationDot"></span>
-                    @endif
-                </a>
-
-                <!-- User Avatar & Dropdown -->
+                <!-- 3. User Avatar & Dropdown -->
                 <div class="user-dropdown" id="userDropdown">
                     <div class="avatar" id="userAvatar" role="button" tabindex="0" aria-haspopup="true" aria-expanded="false" style="cursor: pointer;" title="{{ Auth::user()->name ?? 'User' }}">
                         {{ strtoupper(substr(Auth::user()->name ?? 'US', 0, 2)) }}
@@ -237,31 +295,56 @@
         } catch (e) {}
     })();
 
+    // User profile dropdown
     (function () {
         const dropdown = document.getElementById('userDropdown');
         const avatar = document.getElementById('userAvatar');
-        if (!dropdown || !avatar) return;
+        const notifDropdown = document.getElementById('notifDropdown');
+        const notifBtn = document.getElementById('notifToggleBtn');
 
-        avatar.addEventListener('click', function (e) {
-            e.stopPropagation();
-            const isOpen = dropdown.classList.toggle('open');
-            avatar.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
-        });
+        if (notifBtn && notifDropdown) {
+            notifBtn.addEventListener('click', function (e) {
+                e.stopPropagation();
+                if (dropdown) dropdown.classList.remove('open');
+                const isOpen = notifDropdown.classList.toggle('open');
+                notifBtn.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+            });
+        }
 
-        avatar.addEventListener('keydown', function (e) {
-            if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault();
-                avatar.click();
-            } else if (e.key === 'Escape') {
+        if (avatar && dropdown) {
+            avatar.addEventListener('click', function (e) {
+                e.stopPropagation();
+                if (notifDropdown) notifDropdown.classList.remove('open');
+                const isOpen = dropdown.classList.toggle('open');
+                avatar.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+            });
+
+            avatar.addEventListener('keydown', function (e) {
+                if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    avatar.click();
+                } else if (e.key === 'Escape') {
+                    dropdown.classList.remove('open');
+                    avatar.setAttribute('aria-expanded', 'false');
+                }
+            });
+        }
+
+        document.addEventListener('click', function (e) {
+            if (dropdown && !dropdown.contains(e.target)) {
                 dropdown.classList.remove('open');
-                avatar.setAttribute('aria-expanded', 'false');
+                avatar?.setAttribute('aria-expanded', 'false');
+            }
+            if (notifDropdown && !notifDropdown.contains(e.target)) {
+                notifDropdown.classList.remove('open');
+                notifBtn?.setAttribute('aria-expanded', 'false');
             }
         });
 
-        document.addEventListener('click', function (e) {
-            if (!dropdown.contains(e.target)) {
-                dropdown.classList.remove('open');
-                avatar.setAttribute('aria-expanded', 'false');
+        document.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape') {
+                if (dropdown) dropdown.classList.remove('open');
+                if (notifDropdown) notifDropdown.classList.remove('open');
             }
         });
     })();

@@ -33,10 +33,10 @@
 
     <!-- Header Panel -->
     <div class="panel" style="padding: 18px 22px; margin-bottom: 18px;">
-        <div class="settings-title" style="margin-bottom: 0;">
+        <div class="page-header" style="margin-bottom: 0;">
             <div>
-                <h1 style="font-size: 22px; font-weight: 800; color: #0f243d; margin: 0;">Monitoring Smart Socket</h1>
-                <p style="font-size: 11.5px; color: #64748b; margin: 3px 0 0;">Dual PZEM-004T &amp; Sensor Lingkungan Real-Time (Single Enclosure)</p>
+                <h1 class="page-title">Monitoring Smart Socket</h1>
+                <p class="page-subtitle">Dual PZEM-004T &amp; Sensor Lingkungan Real-Time (Single Enclosure)</p>
             </div>
             <div style="display: flex; align-items: center; gap: 8px;">
                 <span id="live-indicator-badge" style="font-size: 10.5px; font-weight: 800; color: #16897f; background: #e3f8f5; padding: 4px 12px; border-radius: 12px; display: inline-flex; align-items: center; gap: 6px;">
@@ -537,7 +537,7 @@
         if (!btn) return;
         btn.disabled = true;
 
-        fetch('{{ route("socket.toggle") }}', {
+        fetch('{{ route("socket.toggle", absolute: false) }}', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -602,7 +602,7 @@
         btn.disabled = true;
         btn.textContent = 'Mengirim perintah...';
 
-        fetch('{{ route("device.reconnect") }}', {
+        fetch('{{ route("device.reconnect", absolute: false) }}', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -675,7 +675,7 @@
 
     // Telemetry Polling (every 3 seconds) — Updates BOTH sockets and environment directly
     setInterval(() => {
-        fetch('{{ route("device.telemetry") }}')
+        fetch('{{ route("device.telemetry", absolute: false) }}')
             .then(res => res.json())
             .then(data => {
                 if (!data) return;
@@ -773,6 +773,13 @@
                             pill.textContent = data.device.status.toUpperCase();
                             pill.style.background = (data.device.status === 'online') ? '#e3f8f5' : '#fee2e2';
                             pill.style.color = (data.device.status === 'online') ? '#16897f' : '#dc2626';
+                        }
+
+                        const wifiIcon = document.getElementById('wifiStatusIcon');
+                        if (wifiIcon) {
+                            const isOnline = (data.device.status === 'online');
+                            wifiIcon.style.color = isOnline ? '#087c71' : '#8a96a7';
+                            wifiIcon.title = `Status Jaringan ESP32: ${isOnline ? 'Terhubung (Online)' : 'Terputus (Offline)'}`;
                         }
                     }
                 }

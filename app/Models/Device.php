@@ -42,9 +42,49 @@ class Device extends Model
             'last_seen_at' => 'datetime',
             'mqtt_port' => 'integer',
             'mqtt_tls' => 'boolean',
-            'mqtt_username' => 'encrypted',
-            'mqtt_password' => 'encrypted',
         ];
+    }
+
+    public function getMqttUsernameAttribute($value): ?string
+    {
+        if (blank($value)) {
+            return null;
+        }
+
+        try {
+            return decrypt($value);
+        } catch (\Throwable $e) {
+            if (! str_starts_with((string) $value, 'ey') && ! str_contains((string) $value, '{')) {
+                return $value;
+            }
+            return null;
+        }
+    }
+
+    public function setMqttUsernameAttribute($value): void
+    {
+        $this->attributes['mqtt_username'] = blank($value) ? null : encrypt($value);
+    }
+
+    public function getMqttPasswordAttribute($value): ?string
+    {
+        if (blank($value)) {
+            return null;
+        }
+
+        try {
+            return decrypt($value);
+        } catch (\Throwable $e) {
+            if (! str_starts_with((string) $value, 'ey') && ! str_contains((string) $value, '{')) {
+                return $value;
+            }
+            return null;
+        }
+    }
+
+    public function setMqttPasswordAttribute($value): void
+    {
+        $this->attributes['mqtt_password'] = blank($value) ? null : encrypt($value);
     }
 
     public function user(): BelongsTo

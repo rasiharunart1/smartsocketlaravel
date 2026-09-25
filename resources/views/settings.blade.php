@@ -7,7 +7,7 @@
 <section class="content">
 
     <!-- Page Header -->
-    <div class="settings-title">
+    <div class="page-header">
         <div>
             <h1 class="page-title">Konfigurasi</h1>
             <p class="page-subtitle">
@@ -22,7 +22,7 @@
     <!-- Form Batas Perlindungan -->
     <form method="POST" action="{{ route('settings.update') }}">
         @csrf
-        <input type="hidden" name="kwh_rate" value="{{ $threshold->kwh_rate ?? 0 }}">
+        <input type="hidden" name="kwh_rate" value="{{ $threshold?->kwh_rate ?? 0 }}">
 
         <div class="panel protection">
             <div class="section-label">
@@ -201,7 +201,7 @@
                 </div>
                 <div>
                     <label for="mqtt_username" style="display: block; font-size: 11px; font-weight: 700; margin-bottom: 6px;">Username</label>
-                    <input type="text" id="mqtt_username" name="mqtt_username" value="{{ old('mqtt_username', $device->mqtt_username) }}" autocomplete="username" style="width: 100%; padding: 10px 14px; border: 1px solid #cbd5e1; border-radius: 8px;">
+                    <input type="text" id="mqtt_username" name="mqtt_username" value="{{ old('mqtt_username', $device->mqtt_username ?? '') }}" autocomplete="username" style="width: 100%; padding: 10px 14px; border: 1px solid #cbd5e1; border-radius: 8px;">
                 </div>
                 <div>
                     <label for="mqtt_password" style="display: block; font-size: 11px; font-weight: 700; margin-bottom: 6px;">Password</label>
