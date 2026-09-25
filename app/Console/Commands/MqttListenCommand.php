@@ -14,6 +14,7 @@ use App\Services\MqttService;
 use Carbon\Carbon;
 use Exception;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -160,14 +161,17 @@ class MqttListenCommand extends Command
                 $pf2 = isset($s2['power_factor']) ? (float) $s2['power_factor'] : (isset($data['power_factor_2']) ? (float) $data['power_factor_2'] : 0);
 
                 // 4. Update Socket Channel Relay States
+                $relayChanged = false;
                 $channel1 = SocketChannel::firstOrCreate(
                     ['device_id' => $device->id, 'channel_number' => 1],
                     ['name' => 'Socket 1', 'pzem_identifier' => 'PZEM_01', 'is_active' => false, 'status' => 'offline']
                 );
                 if (isset($s1['relay_state'])) {
-                    $channel1->update([
-                        'is_active' => (strtoupper((string) $s1['relay_state']) === 'ON' || $s1['relay_state'] === true || $s1['relay_state'] === 1),
-                    ]);
+                    $newState1 = (strtoupper((string) $s1['relay_state']) === 'ON' || $s1['relay_state'] === true || $s1['relay_state'] === 1);
+                    if ($channel1->is_active !== $newState1) {
+                        $channel1->update(['is_active' => $newState1]);
+                        $relayChanged = true;
+                    }
                 }
 
                 $channel2 = SocketChannel::firstOrCreate(
@@ -175,63 +179,95 @@ class MqttListenCommand extends Command
                     ['name' => 'Socket 2', 'pzem_identifier' => 'PZEM_02', 'is_active' => false, 'status' => 'offline']
                 );
                 if (isset($s2['relay_state'])) {
-                    $channel2->update([
-                        'is_active' => (strtoupper((string) $s2['relay_state']) === 'ON' || $s2['relay_state'] === true || $s2['relay_state'] === 1),
+                    $newState2 = (strtoupper((string) $s2['relay_state']) === 'ON' || $s2['relay_state'] === true || $s2['relay_state'] === 1);
+                    if ($channel2->is_active !== $newState2) {
+                        $channel2->update(['is_active' => $newState2]);
+                        $relayChanged = true;
+                    }
+                }
+
+                // 5. Muat ambang batas proteksi & evaluasi anomali bahaya
+                $threshold = DeviceThreshold::firstOrCreate(['device_id' => $device->id]);
+                $maxV = max($v1, $v2);
+                $maxC = max($c1, $c2);
+                $isThresholdViolated = false;
+                if ($threshold->max_temperature > 0 && $temp >= $threshold->max_temperature) {
+                    $isThresholdViolated = true;
+                }
+                if ($threshold->max_smoke_ppm > 0 && $smoke >= $threshold->max_smoke_ppm) {
+                    $isThresholdViolated = true;
+                }
+                if ($threshold->max_voltage > 0 && $maxV >= $threshold->max_voltage) {
+                    $isThresholdViolated = true;
+                }
+                if ($threshold->max_current > 0 && $maxC >= $threshold->max_current) {
+                    $isThresholdViolated = true;
+                }
+
+                // 6. Mekanisme Interval Data Logging ke Database
+                $logIntervalSec = max(3, (int) ($threshold->log_interval ?? 10));
+                $cacheKey = "device_{$device->id}_last_sensor_log_time";
+                $lastLogTime = (int) Cache::get($cacheKey, 0);
+                $nowSec = time();
+
+                // Selalu simpan jika interval tercapai, atau terjadi perubahan saklar relay, atau sistem mendeteksi kondisi trip/overload
+                $shouldLog = ($nowSec - $lastLogTime >= $logIntervalSec) || $isThresholdViolated || $relayChanged;
+
+                if ($shouldLog) {
+                    Cache::put($cacheKey, $nowSec, 86400);
+
+                    // Save unified SensorLog (All in one table)
+                    SensorLog::create([
+                        'device_id' => $device->id,
+                        'voltage_1' => $v1,
+                        'current_1' => $c1,
+                        'power_1' => $p1,
+                        'energy_1' => $e1,
+                        'frequency_1' => $f1,
+                        'power_factor_1' => $pf1,
+                        'voltage_2' => $v2,
+                        'current_2' => $c2,
+                        'power_2' => $p2,
+                        'energy_2' => $e2,
+                        'frequency_2' => $f2,
+                        'power_factor_2' => $pf2,
+                        'temperature' => $temp,
+                        'smoke_ppm' => $smoke,
+                        'recorded_at' => $recordedAt,
+                    ]);
+
+                    // Also maintain legacy tables for compatibility
+                    EnvironmentalLog::create([
+                        'device_id' => $device->id,
+                        'temperature' => $temp,
+                        'smoke_ppm' => $smoke,
+                        'recorded_at' => $recordedAt,
+                    ]);
+
+                    TelemetryLog::create([
+                        'socket_channel_id' => $channel1->id,
+                        'voltage' => $v1,
+                        'current' => $c1,
+                        'power' => $p1,
+                        'energy' => $e1,
+                        'frequency' => $f1,
+                        'power_factor' => $pf1,
+                        'recorded_at' => $recordedAt,
+                    ]);
+
+                    TelemetryLog::create([
+                        'socket_channel_id' => $channel2->id,
+                        'voltage' => $v2,
+                        'current' => $c2,
+                        'power' => $p2,
+                        'energy' => $e2,
+                        'frequency' => $f2,
+                        'power_factor' => $pf2,
+                        'recorded_at' => $recordedAt,
                     ]);
                 }
 
-                // 5. Save unified SensorLog (All in one table)
-                SensorLog::create([
-                    'device_id' => $device->id,
-                    'voltage_1' => $v1,
-                    'current_1' => $c1,
-                    'power_1' => $p1,
-                    'energy_1' => $e1,
-                    'frequency_1' => $f1,
-                    'power_factor_1' => $pf1,
-                    'voltage_2' => $v2,
-                    'current_2' => $c2,
-                    'power_2' => $p2,
-                    'energy_2' => $e2,
-                    'frequency_2' => $f2,
-                    'power_factor_2' => $pf2,
-                    'temperature' => $temp,
-                    'smoke_ppm' => $smoke,
-                    'recorded_at' => $recordedAt,
-                ]);
-
-                // Also maintain legacy tables for compatibility
-                EnvironmentalLog::create([
-                    'device_id' => $device->id,
-                    'temperature' => $temp,
-                    'smoke_ppm' => $smoke,
-                    'recorded_at' => $recordedAt,
-                ]);
-
-                TelemetryLog::create([
-                    'socket_channel_id' => $channel1->id,
-                    'voltage' => $v1,
-                    'current' => $c1,
-                    'power' => $p1,
-                    'energy' => $e1,
-                    'frequency' => $f1,
-                    'power_factor' => $pf1,
-                    'recorded_at' => $recordedAt,
-                ]);
-
-                TelemetryLog::create([
-                    'socket_channel_id' => $channel2->id,
-                    'voltage' => $v2,
-                    'current' => $c2,
-                    'power' => $p2,
-                    'energy' => $e2,
-                    'frequency' => $f2,
-                    'power_factor' => $pf2,
-                    'recorded_at' => $recordedAt,
-                ]);
-
-                // 6. Check Safety Thresholds & Trigger Alerts (dengan proteksi duplikasi/flood)
-                $threshold = DeviceThreshold::firstOrCreate(['device_id' => $device->id]);
+                // 7. Check Safety Thresholds & Trigger Alerts (dengan proteksi duplikasi/flood)
 
                 if ($threshold->max_temperature > 0 && $temp >= $threshold->max_temperature) {
                     $hasRecent = DeviceAlert::where('device_id', $device->id)

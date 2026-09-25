@@ -117,4 +117,26 @@ class HistoryController extends Controller
             fclose($file);
         }, 200, $headers);
     }
+
+    public function reset(Request $request): \Illuminate\Http\RedirectResponse
+    {
+        $device = $request->user()->devices()->firstOrFail();
+
+        \Illuminate\Support\Facades\DB::transaction(function () use ($device) {
+            \App\Models\SensorLog::where('device_id', $device->id)->delete();
+            \App\Models\EnvironmentalLog::where('device_id', $device->id)->delete();
+
+            $channelIds = $device->socketChannels->pluck('id');
+            \App\Models\TelemetryLog::whereIn('socket_channel_id', $channelIds)->delete();
+
+            \App\Models\ActivityLog::create([
+                'device_id' => $device->id,
+                'event_type' => 'LOG_RESET',
+                'title' => 'Log Riwayat Sensor Direset',
+                'description' => 'Seluruh riwayat log data sensor berhasil dihapus oleh pengguna.',
+            ]);
+        });
+
+        return redirect()->route('history')->with('status', 'Seluruh data riwayat log sensor berhasil direset/dikosongkan.');
+    }
 }

@@ -28,6 +28,7 @@ class UpdateDeviceSettingsRequest extends FormRequest
             'max_temperature' => ['required', 'numeric', 'min:0', 'max:120'],
             'max_smoke_ppm' => ['required', 'numeric', 'min:0', 'max:5000'],
             'kwh_rate' => ['required', 'numeric', 'min:0', 'max:100000'],
+            'log_interval' => ['nullable', 'integer', 'min:3', 'max:3600'],
         ];
     }
 }

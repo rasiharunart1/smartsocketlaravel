@@ -6,6 +6,13 @@
 @section('content')
 <section class="content">
 
+    @if(session('status'))
+        <div style="background: #ecfdf5; border: 1px solid #10b981; color: #065f46; padding: 12px 18px; border-radius: 8px; margin-bottom: 18px; font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+            <span>{{ session('status') }}</span>
+        </div>
+    @endif
+
     <!-- Page Header -->
     <div class="page-header history-head">
         <div>
@@ -24,6 +31,13 @@
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
                 <span>Cetak<br>Laporan</span>
             </button>
+            <form method="POST" action="{{ route('history.reset') }}" onsubmit="return confirm('Peringatan: Apakah Anda yakin ingin MENGHAPUS / MERESET seluruh rekaman data log riwayat sensor? Tindakan ini permanen dan tidak dapat dibatalkan.');" style="display: inline-flex; margin: 0;">
+                @csrf
+                <button type="submit" class="export" style="cursor: pointer; text-align: center; gap: 6px; display: flex; align-items: center; justify-content: center; background: #fff1f2; border: 1px solid #fecdd3; color: #be123c; transition: all 0.2s;" onmouseover="this.style.background='#ffe4e6'" onmouseout="this.style.background='#fff1f2'">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+                    <span>Reset<br>Log</span>
+                </button>
+            </form>
         </div>
     </div>
 

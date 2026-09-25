@@ -17,6 +17,7 @@ class DeviceThreshold extends Model
         'max_temperature',
         'max_smoke_ppm',
         'kwh_rate',
+        'log_interval',
     ];
 
     protected function casts(): array
@@ -27,6 +28,7 @@ class DeviceThreshold extends Model
             'max_temperature' => 'decimal:2',
             'max_smoke_ppm' => 'decimal:2',
             'kwh_rate' => 'decimal:2',
+            'log_interval' => 'integer',
         ];
     }
 

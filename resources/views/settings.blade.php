@@ -129,6 +129,37 @@
                         Menentukan batas deteksi asap (MQ-2) untuk memicu alarm peringatan dini kebakaran.
                     </p>
                 </div>
+
+                <!-- Interval Pencatatan Data Log & Telemetri -->
+                <div class="threshold">
+                    <div class="threshold-head">
+                        <h3>
+                            Interval Logging &amp;<br>
+                            Telemetri
+                        </h3>
+                        <span class="threshold-value" id="badge-interval">{{ $threshold->log_interval ?? 10 }} Detik</span>
+                    </div>
+
+                    <select name="log_interval" id="log_interval"
+                            onchange="document.getElementById('badge-interval').textContent = this.value + ' Detik'"
+                            style="width: 100%; margin: 15px 0; padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13px; font-weight: 600; color: #0f243d; background: #fff; cursor: pointer;">
+                        <option value="3" {{ old('log_interval', $threshold->log_interval ?? 10) == 3 ? 'selected' : '' }}>3 Detik (Sangat Cepat / Real-time Maksimal)</option>
+                        <option value="5" {{ old('log_interval', $threshold->log_interval ?? 10) == 5 ? 'selected' : '' }}>5 Detik (Cepat / Responsif)</option>
+                        <option value="10" {{ old('log_interval', $threshold->log_interval ?? 10) == 10 ? 'selected' : '' }}>10 Detik (Standar Rekomendasi)</option>
+                        <option value="30" {{ old('log_interval', $threshold->log_interval ?? 10) == 30 ? 'selected' : '' }}>30 Detik (Efisien / Database Ringan)</option>
+                        <option value="60" {{ old('log_interval', $threshold->log_interval ?? 10) == 60 ? 'selected' : '' }}>60 Detik (1 Menit / Hemat Penyimpanan)</option>
+                        <option value="300" {{ old('log_interval', $threshold->log_interval ?? 10) == 300 ? 'selected' : '' }}>300 Detik (5 Menit / Sangat Hemat)</option>
+                    </select>
+
+                    <div class="slider-note">
+                        <span>MIN. (3s)</span>
+                        <span>HEMAT (300s)</span>
+                    </div>
+
+                    <p>
+                        Interval penyimpanan log riwayat ke database dan frekuensi telemetri ESP32 untuk mencegah database membengkak.
+                    </p>
+                </div>
             </div>
 
             <div style="margin-top: 24px; display: flex; justify-content: flex-end;">
@@ -159,6 +190,7 @@
             <input type="hidden" name="max_current" value="{{ $threshold->max_current ?? 0 }}">
             <input type="hidden" name="max_temperature" value="{{ $threshold->max_temperature ?? 0 }}">
             <input type="hidden" name="max_smoke_ppm" value="{{ $threshold->max_smoke_ppm ?? 0 }}">
+            <input type="hidden" name="log_interval" value="{{ $threshold->log_interval ?? 10 }}">
 
             <div style="display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap;">
                 <div style="flex: 1; min-width: 220px;">

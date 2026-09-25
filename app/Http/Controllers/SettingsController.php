@@ -57,6 +57,7 @@ class SettingsController extends Controller
                 'max_temperature' => (float) $validated['max_temperature'],
                 'max_smoke_ppm' => (float) $validated['max_smoke_ppm'],
                 'kwh_rate' => (float) $validated['kwh_rate'],
+                'log_interval' => (int) ($validated['log_interval'] ?? 10),
             ]
         );
 
@@ -68,6 +69,7 @@ class SettingsController extends Controller
                 'max_current' => (float) $validated['max_current'],
                 'max_temperature' => (float) $validated['max_temperature'],
                 'max_smoke_ppm' => (float) $validated['max_smoke_ppm'],
+                'log_interval' => (int) ($validated['log_interval'] ?? 10),
             ]);
         } catch (Exception $e) {
             $mqttDelivered = false;
@@ -76,11 +78,11 @@ class SettingsController extends Controller
         ActivityLog::create([
             'device_id' => $device->id,
             'event_type' => 'SETTING_UPDATE',
-            'title' => 'Ambang Batas Diperbarui',
-            'description' => "Batas baru: {$validated['max_voltage']}V, {$validated['max_current']}A, {$validated['max_temperature']}°C, {$validated['max_smoke_ppm']}ppm, tarif Rp ".number_format((float) $validated['kwh_rate'], 2, ',', '.').'/kWh'.($mqttDelivered ? ' (Tersinkron ke broker MQTT)' : ''),
+            'title' => 'Ambang Batas & Parameter Diperbarui',
+            'description' => "Batas baru: {$validated['max_voltage']}V, {$validated['max_current']}A, {$validated['max_temperature']}°C, {$validated['max_smoke_ppm']}ppm, Interval: ".($validated['log_interval'] ?? 10)."s, tarif Rp ".number_format((float) $validated['kwh_rate'], 2, ',', '.').'/kWh'.($mqttDelivered ? ' (Tersinkron ke broker MQTT)' : ''),
         ]);
 
-        $statusMsg = 'Ambang batas keamanan berhasil disimpan!'.($mqttDelivered ? ' Pengaturan disinkronkan ke ESP32 via HiveMQ.' : '');
+        $statusMsg = 'Ambang batas keamanan & parameter berhasil disimpan!'.($mqttDelivered ? ' Pengaturan disinkronkan ke ESP32 via HiveMQ.' : '');
 
         return redirect()->route('settings')->with('status', $statusMsg);
     }

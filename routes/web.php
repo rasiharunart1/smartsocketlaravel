@@ -27,6 +27,7 @@ Route::middleware(['auth'])->group(function () {
     // History & Export
     Route::get('/history', [HistoryController::class, 'index'])->name('history');
     Route::get('/history/export', [HistoryController::class, 'export'])->name('history.export');
+    Route::post('/history/reset', [HistoryController::class, 'reset'])->name('history.reset');
 
     // Settings
     Route::get('/settings', [SettingsController::class, 'index'])->name('settings');
