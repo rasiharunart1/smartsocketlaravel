@@ -71,6 +71,15 @@ class DashboardController extends Controller
 
         $threshold = DeviceThreshold::where('device_id', $device->id)->first();
 
+        $mqttWsConfig = [
+            'host' => $device->mqtt_host ?: config('mqtt.host', 'ab11f67ab13c48b5937d15d0439112f4.s1.eu.hivemq.cloud'),
+            'port' => 8884,
+            'path' => '/mqtt',
+            'username' => $device->mqtt_username ?: config('mqtt.username', 'wilda'),
+            'password' => $device->mqtt_password ?: config('mqtt.password', 'wildajuwita321'),
+            'device_uid' => $device->device_uid,
+        ];
+
         return view('dashboard', compact(
             'device',
             'socket1',
@@ -82,7 +91,8 @@ class DashboardController extends Controller
             'activities',
             'unreadAlertsCount',
             'avgPower',
-            'threshold'
+            'threshold',
+            'mqttWsConfig'
         ));
     }
 

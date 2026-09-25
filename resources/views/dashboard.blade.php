@@ -525,11 +525,13 @@
 @endsection
 
 @push('scripts')
+<script src="https://unpkg.com/mqtt@5.3.5/dist/mqtt.min.js"></script>
 <script>
     const csrfToken = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
     const MAX_TEMP = {{ $maxTemp }};
     const MAX_SMOKE = {{ $maxSmoke }};
     const MAX_CURRENT = {{ $maxCurr }};
+    const MQTT_WS_CONFIG = @json($mqttWsConfig ?? null);
 
     // Toggle Socket function via AJAX
     function toggleSocket(socketNum) {
@@ -673,7 +675,273 @@
         }
     }
 
-    // Telemetry Polling (every 3 seconds) — Updates BOTH sockets and environment directly
+    // Helper to update Device Diagnostics UI
+    function updateDeviceStatusUI(status, rssi, ip, lastSeen) {
+        const isOnline = (status === 'online');
+        const pill = document.getElementById('diag-status-pill');
+        if (pill) {
+            pill.textContent = (status || 'online').toUpperCase();
+            pill.style.background = isOnline ? '#e3f8f5' : '#fee2e2';
+            pill.style.color = isOnline ? '#16897f' : '#dc2626';
+        }
+
+        const wifiIcon = document.getElementById('wifiStatusIcon');
+        if (wifiIcon) {
+            wifiIcon.style.color = isOnline ? '#087c71' : '#8a96a7';
+            wifiIcon.title = `Status Jaringan ESP32: ${isOnline ? 'Terhubung (Online)' : 'Terputus (Offline)'}`;
+        }
+
+        if (rssi !== null && rssi !== undefined) {
+            const wEl = document.getElementById('diag-wifi');
+            const wBar = document.getElementById('diag-wifi-bar');
+            if (wEl) wEl.textContent = rssi + ' dBm';
+            if (wBar) {
+                const pct = Math.max(10, Math.min(100, 100 + parseFloat(rssi)));
+                wBar.style.width = pct + '%';
+            }
+        }
+
+        if (ip) {
+            const ipEl = document.getElementById('diag-ip');
+            if (ipEl) ipEl.textContent = ip;
+        }
+
+        if (lastSeen) {
+            const lsEl = document.getElementById('diag-last-seen');
+            if (lsEl) lsEl.textContent = lastSeen;
+        }
+    }
+
+    // Handler: Process MQTT Telemetry Packet directly from HiveMQ WebSocket
+    function handleMqttTelemetry(data) {
+        if (!data) return;
+
+        // Update Socket 1
+        const s1 = data.sockets?.socket_1 || data.socket_1;
+        if (s1) {
+            const isActive1 = (String(s1.relay_state).toUpperCase() === 'ON' || s1.relay_state === true || s1.relay_state === 1 || s1.is_active === true);
+            updateSocketChannelMetrics(1, {
+                voltage: s1.voltage,
+                current: s1.current,
+                power: s1.power,
+                energy: s1.energy,
+                frequency: s1.frequency,
+                power_factor: s1.power_factor,
+                is_active: isActive1,
+                status: 'online'
+            });
+        }
+
+        // Update Socket 2
+        const s2 = data.sockets?.socket_2 || data.socket_2;
+        if (s2) {
+            const isActive2 = (String(s2.relay_state).toUpperCase() === 'ON' || s2.relay_state === true || s2.relay_state === 1 || s2.is_active === true);
+            updateSocketChannelMetrics(2, {
+                voltage: s2.voltage,
+                current: s2.current,
+                power: s2.power,
+                energy: s2.energy,
+                frequency: s2.frequency,
+                power_factor: s2.power_factor,
+                is_active: isActive2,
+                status: 'online'
+            });
+        }
+
+        // Update Environment (Suhu & Asap)
+        const env = data.environmental || {};
+        const tempVal = env.temperature !== undefined ? parseFloat(env.temperature) : (data.temperature !== undefined ? parseFloat(data.temperature) : null);
+        const smokeVal = env.smoke_ppm !== undefined ? parseFloat(env.smoke_ppm) : (data.smoke_ppm !== undefined ? parseFloat(data.smoke_ppm) : null);
+
+        if (tempVal !== null && !isNaN(tempVal)) {
+            const tText = tempVal.toFixed(1);
+            const tEl = document.getElementById('val-temperature');
+            const dtEl = document.getElementById('diag-temp');
+            const tBar = document.getElementById('bar-temperature');
+            const tStatus = document.getElementById('status-temp');
+
+            if (tEl) tEl.textContent = tText;
+            if (dtEl) dtEl.textContent = tText + ' °C';
+            if (tBar) {
+                tBar.style.width = Math.min(100, Math.max(5, (tempVal / Math.max(1, MAX_TEMP)) * 100)) + '%';
+                tBar.style.background = MAX_TEMP > 0 && tempVal > MAX_TEMP ? '#dc2626' : '#123f80';
+            }
+            if (tStatus) {
+                tStatus.textContent = MAX_TEMP > 0 && tempVal > MAX_TEMP ? 'Waspada' : 'Aman';
+                tStatus.style.color = MAX_TEMP > 0 && tempVal > MAX_TEMP ? '#dc2626' : '#15803d';
+            }
+        }
+
+        if (smokeVal !== null && !isNaN(smokeVal)) {
+            const sText = Math.round(smokeVal);
+            const sEl = document.getElementById('val-smoke');
+            const dsEl = document.getElementById('diag-smoke');
+            const sBar = document.getElementById('bar-smoke');
+            const sStatus = document.getElementById('status-smoke');
+
+            if (sEl) sEl.textContent = sText;
+            if (dsEl) dsEl.textContent = sText + ' ppm';
+            if (sBar) {
+                sBar.style.width = Math.min(100, Math.max(5, (smokeVal / Math.max(1, MAX_SMOKE)) * 100)) + '%';
+                sBar.style.background = MAX_SMOKE > 0 && smokeVal > MAX_SMOKE ? '#dc2626' : '#d97706';
+            }
+            if (sStatus) {
+                sStatus.textContent = MAX_SMOKE > 0 && smokeVal > MAX_SMOKE ? 'Bahaya Asap' : 'Bersih';
+                sStatus.style.color = MAX_SMOKE > 0 && smokeVal > MAX_SMOKE ? '#dc2626' : '#15803d';
+            }
+        }
+
+        // Total Power & Total Energy
+        const p1 = s1 ? (parseFloat(s1.power) || 0) : 0;
+        const p2 = s2 ? (parseFloat(s2.power) || 0) : 0;
+        const totPower = p1 + p2;
+        const tpEl = document.getElementById('val-total-power');
+        const tpBar = document.getElementById('bar-total-power');
+        if (tpEl) tpEl.textContent = totPower.toFixed(1);
+        if (tpBar) tpBar.style.width = Math.min(100, Math.max(5, (totPower / 3500) * 100)) + '%';
+
+        const e1 = s1 ? (parseFloat(s1.energy) || 0) : 0;
+        const e2 = s2 ? (parseFloat(s2.energy) || 0) : 0;
+        const totEnergy = e1 + e2;
+        const teEl = document.getElementById('val-total-energy');
+        const teBar = document.getElementById('bar-total-energy');
+        if (teEl) teEl.textContent = totEnergy.toFixed(3);
+        if (teBar) teBar.style.width = Math.min(100, Math.max(5, (totEnergy / 50) * 100)) + '%';
+
+        // Update online status
+        updateDeviceStatusUI('online', null, null, 'Baru saja');
+    }
+
+    // Handler: Process MQTT Status Packet (Heartbeat & WiFi)
+    function handleMqttStatus(data) {
+        if (!data) return;
+        updateDeviceStatusUI(data.status, data.wifi_rssi, data.ip_address, 'Baru saja');
+    }
+
+    // Handler: Process MQTT Alert Packet
+    function handleMqttAlert(data) {
+        console.warn('[MQTT Alert Terdeteksi]:', data);
+        // Refresh notifikasi dropdown seketika dari database
+        fetch('{{ route("api.notifications", absolute: false) }}', { headers: { 'Accept': 'application/json' } })
+            .then(res => res.json())
+            .then(d => {
+                if (d && d.success && typeof window.renderNotificationItems === 'function') {
+                    window.renderNotificationItems(d.notifications, d.unread_count);
+                }
+            })
+            .catch(() => {});
+    }
+
+    // =========================================================================
+    //  HIVEMQ CLOUD MQTT OVER WEBSOCKET (WSS PORT 8884)
+    // =========================================================================
+    let mqttWsClient = null;
+
+    function initMqttWebSocket() {
+        if (!MQTT_WS_CONFIG || !MQTT_WS_CONFIG.host || typeof mqtt === 'undefined') {
+            console.warn('[MQTT WS] Konfigurasi MQTT tidak lengkap atau MQTT.js belum tersedia. Menggunakan fallback HTTP polling.');
+            updateBadgeToPollingFallback();
+            return;
+        }
+
+        const host = MQTT_WS_CONFIG.host;
+        const port = MQTT_WS_CONFIG.port || 8884;
+        const path = MQTT_WS_CONFIG.path || '/mqtt';
+        const deviceUid = MQTT_WS_CONFIG.device_uid || 'ESP32_SOCKET_01';
+
+        // Random Client ID unik per tab browser
+        const clientId = 'web_dashboard_' + Math.random().toString(16).substring(2, 10);
+        const wsUrl = `wss://${host}:${port}${path}`;
+
+        console.log(`[MQTT WS] Menghubungkan ke ${wsUrl} dengan ID ${clientId}...`);
+
+        try {
+            mqttWsClient = mqtt.connect(wsUrl, {
+                clientId: clientId,
+                username: MQTT_WS_CONFIG.username || '',
+                password: MQTT_WS_CONFIG.password || '',
+                clean: true,
+                reconnectPeriod: 4000,
+                connectTimeout: 10000,
+            });
+
+            mqttWsClient.on('connect', () => {
+                console.log('[MQTT WS] Sukses terhubung ke HiveMQ Cloud via WebSocket!');
+                const liveBadge = document.getElementById('live-indicator-badge');
+                if (liveBadge) {
+                    liveBadge.innerHTML = `<span style="width: 7px; height: 7px; border-radius: 50%; background: #16897f; animation: pulse 1.8s infinite;"></span> LIVE REAL-TIME (WEBSOCKET)`;
+                    liveBadge.style.color = '#16897f';
+                    liveBadge.style.background = '#e3f8f5';
+                }
+
+                // Subscriptions
+                const topicTelemetry = `smartsocket/${deviceUid}/telemetry`;
+                const topicStatus = `smartsocket/${deviceUid}/status`;
+                const topicAlert = `smartsocket/${deviceUid}/alert`;
+
+                mqttWsClient.subscribe([topicTelemetry, topicStatus, topicAlert], (err) => {
+                    if (!err) {
+                        console.log(`[MQTT WS] Berlangganan topik: ${topicTelemetry}, ${topicStatus}, ${topicAlert}`);
+                    } else {
+                        console.error('[MQTT WS] Gagal subscribe:', err);
+                    }
+                });
+            });
+
+            mqttWsClient.on('message', (topic, message) => {
+                try {
+                    const payload = JSON.parse(message.toString());
+                    if (topic.endsWith('/telemetry')) {
+                        handleMqttTelemetry(payload);
+                    } else if (topic.endsWith('/status')) {
+                        handleMqttStatus(payload);
+                    } else if (topic.endsWith('/alert')) {
+                        handleMqttAlert(payload);
+                    }
+                } catch (e) {
+                    // Abaikan parsing error payload non-json
+                }
+            });
+
+            mqttWsClient.on('error', (err) => {
+                console.warn('[MQTT WS] Error:', err);
+                updateBadgeToPollingFallback();
+            });
+
+            mqttWsClient.on('close', () => {
+                console.warn('[MQTT WS] Terputus. Beralih ke fallback polling HTTP...');
+                updateBadgeToPollingFallback();
+            });
+
+            mqttWsClient.on('reconnect', () => {
+                console.log('[MQTT WS] Menyambung kembali ke broker HiveMQ...');
+            });
+        } catch (e) {
+            console.error('[MQTT WS] Inisialisasi MQTT gagal:', e);
+            updateBadgeToPollingFallback();
+        }
+    }
+
+    function updateBadgeToPollingFallback() {
+        const liveBadge = document.getElementById('live-indicator-badge');
+        if (liveBadge) {
+            liveBadge.innerHTML = `<span style="width: 7px; height: 7px; border-radius: 50%; background: #0284c7; animation: pulse 1.8s infinite;"></span> LIVE REAL-TIME (HTTP)`;
+            liveBadge.style.color = '#0284c7';
+            liveBadge.style.background = '#e0f2fe';
+        }
+    }
+
+    // Jalankan inisialisasi WebSocket
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initMqttWebSocket);
+    } else {
+        initMqttWebSocket();
+    }
+
+    // =========================================================================
+    //  BACKGROUND FALLBACK HTTP POLLING (Setiap 8 Detik)
+    //  Menjamin sinkronisasi database & log notifikasi jika websocket offline
+    // =========================================================================
     setInterval(() => {
         fetch('{{ route("device.telemetry", absolute: false) }}')
             .then(res => res.json())
@@ -750,41 +1018,15 @@
 
                 // Update Device Diagnostics
                 if (data.device) {
-                    if (data.device.wifi_rssi !== null && data.device.wifi_rssi !== undefined) {
-                        const wEl = document.getElementById('diag-wifi');
-                        const wBar = document.getElementById('diag-wifi-bar');
-                        if (wEl) wEl.textContent = data.device.wifi_rssi + ' dBm';
-                        if (wBar) {
-                            const pct = Math.max(10, Math.min(100, 100 + parseFloat(data.device.wifi_rssi)));
-                            wBar.style.width = pct + '%';
-                        }
-                    }
-                    if (data.device.ip_address) {
-                        const ipEl = document.getElementById('diag-ip');
-                        if (ipEl) ipEl.textContent = data.device.ip_address;
-                    }
-                    if (data.device.last_seen) {
-                        const lsEl = document.getElementById('diag-last-seen');
-                        if (lsEl) lsEl.textContent = data.device.last_seen;
-                    }
-                    if (data.device.status) {
-                        const pill = document.getElementById('diag-status-pill');
-                        if (pill) {
-                            pill.textContent = data.device.status.toUpperCase();
-                            pill.style.background = (data.device.status === 'online') ? '#e3f8f5' : '#fee2e2';
-                            pill.style.color = (data.device.status === 'online') ? '#16897f' : '#dc2626';
-                        }
-
-                        const wifiIcon = document.getElementById('wifiStatusIcon');
-                        if (wifiIcon) {
-                            const isOnline = (data.device.status === 'online');
-                            wifiIcon.style.color = isOnline ? '#087c71' : '#8a96a7';
-                            wifiIcon.title = `Status Jaringan ESP32: ${isOnline ? 'Terhubung (Online)' : 'Terputus (Offline)'}`;
-                        }
-                    }
+                    updateDeviceStatusUI(
+                        data.device.status,
+                        data.device.wifi_rssi,
+                        data.device.ip_address,
+                        data.device.last_seen
+                    );
                 }
 
-                // Update notification dropdown live if notifications array is provided
+                // Update notification dropdown live
                 if (data.notifications && typeof window.renderNotificationItems === 'function') {
                     window.renderNotificationItems(data.notifications, data.unread_alerts ?? 0);
                 }
@@ -792,6 +1034,6 @@
             .catch(err => {
                 // Background poll silent catch
             });
-    }, 3000);
+    }, 8000);
 </script>
 @endpush

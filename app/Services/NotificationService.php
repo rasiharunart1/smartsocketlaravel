@@ -186,9 +186,17 @@ class NotificationService
             ];
         }
 
+        // Urutkan: Peringatan kritis/belum diselesaikan selalu di atas, sisanya diurutkan kronologis (terbaru lebih dahulu)
+        usort($notifications, function ($a, $b) {
+            if ($a['is_critical'] !== $b['is_critical']) {
+                return $b['is_critical'] <=> $a['is_critical'];
+            }
+            return strcmp((string) ($b['raw_time'] ?? ''), (string) ($a['raw_time'] ?? ''));
+        });
+
         return [
             'unread_count' => $unreadCount,
-            'notifications' => $notifications,
+            'notifications' => array_values($notifications),
         ];
     }
 }
