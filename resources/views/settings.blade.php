@@ -241,6 +241,111 @@
         </form>
     </div>
 
+    {{-- Panel: Reset Energi kWh PZEM --}}
+    <div class="panel network" style="margin-top: 20px; border-left: 4px solid #f59e0b;">
+        <div class="section-label" style="display: flex; align-items: center; justify-content: space-between;">
+            <span style="display: inline-flex; align-items: center; gap: 8px;">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
+                    <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+                </svg>
+                Reset Energi kWh PZEM-004T
+            </span>
+            <span style="font-size: 11px; font-weight: 600; background: #fef3c7; color: #b45309; padding: 3px 10px; border-radius: 20px;">
+                ⚡ Aksi Permanen
+            </span>
+        </div>
+
+        <p style="font-size: 12px; color: #64748b; margin: 0 0 16px; line-height: 1.6;">
+            Reset register akumulasi energi <strong>kWh</strong> pada modul <strong>PZEM-004T</strong> kembali ke <strong>0</strong>.
+            Operasi ini bersifat permanen pada hardware sensor dan <em>tidak dapat dibatalkan</em>.
+            Gunakan untuk memulai penghitungan ulang konsumsi daya dari nol.
+        </p>
+
+        {{-- Nilai kWh saat ini --}}
+        @php
+            $latestSLog = \App\Models\SensorLog::where('device_id', $device->id)->latest('recorded_at')->first();
+            $curE1 = $latestSLog ? number_format((float)$latestSLog->energy_1, 3) : '—';
+            $curE2 = $latestSLog ? number_format((float)$latestSLog->energy_2, 3) : '—';
+        @endphp
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 20px;">
+            <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px 16px; text-align: center;">
+                <div style="font-size: 10px; font-weight: 800; color: #64748b; letter-spacing: 0.4px; text-transform: uppercase; margin-bottom: 6px;">PZEM-1 · Soket 1</div>
+                <div style="font-size: 24px; font-weight: 800; color: #0f243d;">{{ $curE1 }}</div>
+                <div style="font-size: 11px; font-weight: 700; color: #64748b; margin-top: 2px;">kWh</div>
+            </div>
+            <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px 16px; text-align: center;">
+                <div style="font-size: 10px; font-weight: 800; color: #64748b; letter-spacing: 0.4px; text-transform: uppercase; margin-bottom: 6px;">PZEM-2 · Soket 2</div>
+                <div style="font-size: 24px; font-weight: 800; color: #0f243d;">{{ $curE2 }}</div>
+                <div style="font-size: 11px; font-weight: 700; color: #64748b; margin-top: 2px;">kWh</div>
+            </div>
+        </div>
+
+        {{-- Tombol Reset --}}
+        <div style="display: flex; flex-wrap: wrap; gap: 10px; align-items: center;">
+
+            {{-- Reset Soket 1 --}}
+            <form method="POST" action="{{ route('settings.energy.reset') }}" id="form-reset-e1"
+                  onsubmit="return confirm('⚠️ Reset Energi PZEM-1 (Soket 1)?\n\nNilai kWh saat ini: {{ $curE1 }} kWh akan dikembalikan ke 0.\nAksi ini PERMANEN dan tidak dapat dibatalkan.\n\nLanjutkan?')">
+                @csrf
+                <input type="hidden" name="socket_number" value="1">
+                <button type="submit" id="btn-reset-energy-1"
+                        style="display: inline-flex; align-items: center; gap: 7px; padding: 9px 18px; border: 1.5px solid #f59e0b; border-radius: 8px; background: #fffbeb; color: #b45309; font-size: 12px; font-weight: 700; cursor: pointer; transition: all 0.2s ease;"
+                        onmouseover="this.style.background='#f59e0b';this.style.color='#fff';"
+                        onmouseout="this.style.background='#fffbeb';this.style.color='#b45309';">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+                    </svg>
+                    Reset Soket 1
+                </button>
+            </form>
+
+            {{-- Reset Soket 2 --}}
+            <form method="POST" action="{{ route('settings.energy.reset') }}" id="form-reset-e2"
+                  onsubmit="return confirm('⚠️ Reset Energi PZEM-2 (Soket 2)?\n\nNilai kWh saat ini: {{ $curE2 }} kWh akan dikembalikan ke 0.\nAksi ini PERMANEN dan tidak dapat dibatalkan.\n\nLanjutkan?')">
+                @csrf
+                <input type="hidden" name="socket_number" value="2">
+                <button type="submit" id="btn-reset-energy-2"
+                        style="display: inline-flex; align-items: center; gap: 7px; padding: 9px 18px; border: 1.5px solid #f59e0b; border-radius: 8px; background: #fffbeb; color: #b45309; font-size: 12px; font-weight: 700; cursor: pointer; transition: all 0.2s ease;"
+                        onmouseover="this.style.background='#f59e0b';this.style.color='#fff';"
+                        onmouseout="this.style.background='#fffbeb';this.style.color='#b45309';">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+                    </svg>
+                    Reset Soket 2
+                </button>
+            </form>
+
+            {{-- Reset Keduanya --}}
+            <form method="POST" action="{{ route('settings.energy.reset') }}" id="form-reset-eall"
+                  onsubmit="return confirm('🔴 Reset Energi SEMUA SOKET (PZEM-1 & PZEM-2)?\n\nSoket 1: {{ $curE1 }} kWh → 0\nSoket 2: {{ $curE2 }} kWh → 0\n\nAksi ini PERMANEN dan tidak dapat dibatalkan.\n\nLanjutkan reset keduanya?')">
+                @csrf
+                <input type="hidden" name="socket_number" value="0">
+                <button type="submit" id="btn-reset-energy-all"
+                        style="display: inline-flex; align-items: center; gap: 7px; padding: 9px 18px; border: 1.5px solid #ef4444; border-radius: 8px; background: #fff1f2; color: #dc2626; font-size: 12px; font-weight: 700; cursor: pointer; transition: all 0.2s ease;"
+                        onmouseover="this.style.background='#ef4444';this.style.color='#fff';"
+                        onmouseout="this.style.background='#fff1f2';this.style.color='#dc2626';">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="1 4 1 10 7 10"/><polyline points="23 20 23 14 17 14"/>
+                        <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+                    </svg>
+                    Reset Keduanya
+                </button>
+            </form>
+        </div>
+
+        <p style="margin-top: 14px; font-size: 11px; color: #94a3b8; line-height: 1.5;">
+            <strong style="color: #b45309;">⚠ Catatan:</strong>
+            Perintah dikirim melalui MQTT ke ESP32 secara langsung. Nilai kWh di dashboard akan diperbarui otomatis dalam beberapa detik setelah ESP32 menerima dan mengeksekusi perintah. Pastikan perangkat dalam kondisi <strong>Online</strong> sebelum melakukan reset.
+        </p>
+
+        @if(session('warning'))
+            <div style="margin-top: 12px; padding: 10px 14px; background: #fef3c7; border: 1px solid #fbbf24; border-radius: 8px; font-size: 12px; color: #92400e; font-weight: 600;">
+                ⚠ {{ session('warning') }}
+            </div>
+        @endif
+    </div>
+
     <!-- Kredensial MQTT -->
     <div class="panel network" style="margin-top: 20px;">
         <div class="section-label">Kredensial MQTT Perangkat</div>

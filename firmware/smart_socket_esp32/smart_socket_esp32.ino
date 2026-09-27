@@ -1,4 +1,4 @@
-/*
+           /*
  * ============================================================================
  *  Smart Socket ESP32 Firmware
  *  ----------------------------------------------------------------------------
@@ -50,10 +50,11 @@ const char* MQTT_CLIENT_ID = "ESP32_SmartSocket";
 String TOPIC_TELEMETRY;   // smartsocket/{uid}/telemetry
 String TOPIC_STATUS;      // smartsocket/{uid}/status
 String TOPIC_ALERT;       // smartsocket/{uid}/alert
-String TOPIC_SWITCH;      // smartsocket/{uid}/command/switch
-String TOPIC_SWITCH_SYNC; // smartsocket/{uid}/command/switch/sync (Retained Relay State)
-String TOPIC_THRESHOLD;   // smartsocket/{uid}/command/threshold
-String TOPIC_RECONNECT;   // smartsocket/{uid}/command/reconnect
+String TOPIC_SWITCH;        // smartsocket/{uid}/command/switch
+String TOPIC_SWITCH_SYNC;   // smartsocket/{uid}/command/switch/sync (Retained Relay State)
+String TOPIC_THRESHOLD;     // smartsocket/{uid}/command/threshold
+String TOPIC_RECONNECT;     // smartsocket/{uid}/command/reconnect
+String TOPIC_RESET_ENERGY;  // smartsocket/{uid}/command/reset_energy
 
 // ----------------------------- PIN MAPPING -----------------------------
 #define RELAY1_PIN   18   // Relay Soket 1
@@ -89,7 +90,7 @@ LiquidCrystal_I2C lcd(LCD_I2C_ADDR, LCD_COLUMNS, LCD_ROWS);
 // Konfigurasi Level Logika Relay:
 // Sebagian besar modul relay 2-channel optocoupler adalah ACTIVE-LOW (LOW = ON, HIGH = OFF).
 // Jika modul relay Anda tipe ACTIVE-HIGH (HIGH = ON), ubah menjadi false.
-#define RELAY_ACTIVE_LOW  true
+#define RELAY_ACTIVE_LOW  false
 
 // Custom Icon untuk LCD 16x2 (Karakter Derajat °)
 const byte customCharDegree[8] = {
@@ -195,6 +196,7 @@ void mqttCallback(char* topic, byte* payload, unsigned int length);
 void processSwitchCommand(int socketNumber, const char* stateStr);
 void processThresholdCommand(float v_max, float c_max, float t_max, float s_max, int dev_interval = 0);
 void processReconnectCommand();
+void processResetEnergyCommand(int socketNumber);
 float readTemperature();
 float readSmokePPM();
 float sanitizeReading(float value);
@@ -255,10 +257,11 @@ void setup() {
     TOPIC_TELEMETRY   = String("smartsocket/") + DEVICE_UID + "/telemetry";
     TOPIC_STATUS      = String("smartsocket/") + DEVICE_UID + "/status";
     TOPIC_ALERT       = String("smartsocket/") + DEVICE_UID + "/alert";
-    TOPIC_SWITCH      = String("smartsocket/") + DEVICE_UID + "/command/switch";
-    TOPIC_SWITCH_SYNC = String("smartsocket/") + DEVICE_UID + "/command/switch/sync";
-    TOPIC_THRESHOLD   = String("smartsocket/") + DEVICE_UID + "/command/threshold";
-    TOPIC_RECONNECT   = String("smartsocket/") + DEVICE_UID + "/command/reconnect";
+    TOPIC_SWITCH        = String("smartsocket/") + DEVICE_UID + "/command/switch";
+    TOPIC_SWITCH_SYNC   = String("smartsocket/") + DEVICE_UID + "/command/switch/sync";
+    TOPIC_THRESHOLD     = String("smartsocket/") + DEVICE_UID + "/command/threshold";
+    TOPIC_RECONNECT     = String("smartsocket/") + DEVICE_UID + "/command/reconnect";
+    TOPIC_RESET_ENERGY  = String("smartsocket/") + DEVICE_UID + "/command/reset_energy";
 
     // 6. Inisialisasi HardwareSerial PZEM-004T v3.0
     PZEMSerial1.begin(9600, SERIAL_8N1, PZEM1_RX, PZEM1_TX);
@@ -393,6 +396,7 @@ void connectMqtt() {
         }
         mqttClient.subscribe(TOPIC_THRESHOLD.c_str(), 1);
         mqttClient.subscribe(TOPIC_RECONNECT.c_str(), 1);
+        mqttClient.subscribe(TOPIC_RESET_ENERGY.c_str(), 1);
 
         // Publish status online dengan retain flag
         mqttClient.publish(TOPIC_STATUS.c_str(), statusPayload.c_str(), true);
@@ -630,6 +634,10 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
         processThresholdCommand(v_max, c_max, t_max, s_max, dev_interval);
     } else if (topicStr == TOPIC_RECONNECT) {
         processReconnectCommand();
+    } else if (topicStr == TOPIC_RESET_ENERGY) {
+        // Payload: { "socket_number": 1 } atau 0 untuk reset keduanya
+        int socketNum = doc["socket_number"] | 0;
+        processResetEnergyCommand(socketNum);
     }
 }
 
@@ -697,6 +705,26 @@ void processReconnectCommand() {
     WiFi.disconnect();
     lastWifiRetryMs = millis();
     WiFi.begin(WIFI_SSID, WIFI_PASS);
+}
+
+void processResetEnergyCommand(int socketNumber) {
+    // socketNumber: 1=PZEM1 saja, 2=PZEM2 saja, 0=keduanya
+    bool ok1 = false, ok2 = false;
+
+    if (socketNumber == 1 || socketNumber == 0) {
+        ok1 = pzem1.resetEnergy();
+        Serial.printf("[Energy Reset] PZEM-1 (Socket 1): %s\n", ok1 ? "BERHASIL" : "GAGAL");
+    }
+    if (socketNumber == 2 || socketNumber == 0) {
+        ok2 = pzem2.resetEnergy();
+        Serial.printf("[Energy Reset] PZEM-2 (Socket 2): %s\n", ok2 ? "BERHASIL" : "GAGAL");
+    }
+
+    // Kirim telemetri segera agar nilai kWh di dashboard ter-update ke 0
+    delay(150);
+    publishTelemetry();
+
+    Serial.println("[Energy Reset] Reset kWh selesai. Telemetri diperbarui.");
 }
 
 // ============================================================================
@@ -966,7 +994,7 @@ void publishStatus(bool online) {
     if (mqttClient.connected()) {
         // Status dipublish DENGAN retain flag (QoS 1, retain: true)
         mqttClient.publish(TOPIC_STATUS.c_str(), payload.c_str(), true);
-        Serial.print("[Status] ");
+        Serial.print("[Status] ");   
         Serial.println(payload);
     }
 }

@@ -137,4 +137,22 @@ class MqttService
 
         return $this->publish($device, $topic, $payload, 1, false);
     }
+
+    /**
+     * Publish perintah reset energi (kWh) ke PZEM-004T melalui ESP32.
+     *
+     * @param  Device  $device
+     * @param  int  $socketNumber  1 = PZEM-1, 2 = PZEM-2, 0 = keduanya
+     */
+    public function publishResetEnergy(Device $device, int $socketNumber = 0): bool
+    {
+        $topic = "smartsocket/{$device->device_uid}/command/reset_energy";
+        $payload = [
+            'action'        => 'RESET_ENERGY',
+            'socket_number' => $socketNumber, // 0 = reset keduanya
+            'timestamp'     => now()->timestamp,
+        ];
+
+        return $this->publish($device, $topic, $payload, 1, false);
+    }
 }

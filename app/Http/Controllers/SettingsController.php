@@ -123,4 +123,48 @@ class SettingsController extends Controller
 
         return redirect()->route('settings')->with('status', 'Kredensial MQTT berhasil disimpan.');
     }
+
+    /**
+     * Reset akumulasi energi (kWh) register PZEM-004T melalui perintah MQTT ke ESP32.
+     */
+    public function resetEnergy(Request $request): RedirectResponse
+    {
+        $validated = $request->validate([
+            'socket_number' => ['required', 'integer', 'in:0,1,2'],
+        ]);
+
+        $device = $request->user()->devices()->firstOrFail();
+
+        $socketNumber = (int) $validated['socket_number'];
+
+        $mqttDelivered = false;
+        try {
+            $mqttDelivered = $this->mqttService->publishResetEnergy($device, $socketNumber);
+        } catch (Exception $e) {
+            $mqttDelivered = false;
+        }
+
+        $socketLabel = match ($socketNumber) {
+            1 => 'PZEM-1 (Soket 1)',
+            2 => 'PZEM-2 (Soket 2)',
+            default => 'PZEM-1 & PZEM-2 (Semua Soket)',
+        };
+
+        ActivityLog::create([
+            'device_id' => $device->id,
+            'event_type' => 'ENERGY_RESET',
+            'title'      => "Reset Energi kWh {$socketLabel}",
+            'description' => "Register akumulasi energi kWh {$socketLabel} direset ke 0 dari halaman Settings."
+                .($mqttDelivered ? ' Perintah berhasil dikirim ke ESP32 via MQTT.' : ' (MQTT tidak terkirim – periksa koneksi broker)'),
+        ]);
+
+        $msg = $mqttDelivered
+            ? "Perintah reset energi kWh {$socketLabel} berhasil dikirim ke ESP32. Nilai kWh akan segera kembali ke 0."
+            : "Reset dicatat, namun MQTT tidak dapat menghubungi ESP32. Pastikan perangkat online.";
+
+        return redirect()->route('settings')->with(
+            $mqttDelivered ? 'status' : 'warning',
+            $msg
+        );
+    }
 }

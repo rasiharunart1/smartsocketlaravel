@@ -33,6 +33,7 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/settings', [SettingsController::class, 'index'])->name('settings');
     Route::post('/settings', [SettingsController::class, 'update'])->name('settings.update');
     Route::put('/settings/mqtt', [SettingsController::class, 'updateMqtt'])->name('settings.mqtt.update');
+    Route::post('/settings/energy/reset', [SettingsController::class, 'resetEnergy'])->name('settings.energy.reset');
 
     // About
     Route::get('/about', [AboutController::class, 'index'])->name('about');
