@@ -18,7 +18,7 @@
 
         <!-- Introduction -->
         <div class="about-intro">
-            <div class="device-photo" style="position: relative; overflow: hidden; border-radius: 12px; box-shadow: 0 4px 20px rgba(15, 36, 61, 0.12); border: 1px solid #d8e2ef; background: #0f243d;">
+            <!-- <div class="device-photo" style="position: relative; overflow: hidden; border-radius: 12px; box-shadow: 0 4px 20px rgba(15, 36, 61, 0.12); border: 1px solid #d8e2ef; background: #0f243d;">
                 <img src="{{ asset('img/device/device_perspective.jpg') }}" alt="Foto Fisik Smart Socket IoT" style="width: 100%; height: 100%; min-height: 270px; object-fit: cover; display: block; transition: transform 0.3s ease;" onmouseover="this.style.transform='scale(1.03)'" onmouseout="this.style.transform='scale(1)'">
                 <div style="position: absolute; bottom: 0; left: 0; right: 0; padding: 12px 16px; background: linear-gradient(180deg, transparent 0%, rgba(15, 36, 61, 0.88) 100%); color: #fff;">
                     <div style="font-size: 13px; font-weight: 700; display: flex; align-items: center; gap: 6px;">
@@ -27,7 +27,7 @@
                     </div>
                     <div style="font-size: 10.5px; color: #cbd5e1; margin-top: 2px;">ESP32 · Dual PZEM-004T · LCD 16x2 · Proteksi Kebakaran</div>
                 </div>
-            </div>
+            </div> -->
 
             <div class="about-text">
                 Smart Socket merupakan perangkat berbasis Internet of Things (IoT) yang digunakan untuk memantau dan mengendalikan penggunaan listrik pada perangkat elektronik. Sistem ini memanfaatkan sensor ganda PZEM-004T untuk membaca kondisi listrik independen per soket, sensor suhu, dan kadar asap secara real-time, serta menyediakan pengendalian relay jarak jauh melalui broker HiveMQ Cloud TLS.
