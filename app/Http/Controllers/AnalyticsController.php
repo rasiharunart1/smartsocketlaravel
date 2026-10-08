@@ -9,8 +9,10 @@ use App\Models\TelemetryLog;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 
+/** Menyiapkan agregasi daya, energi, biaya, dan grafik analitik perangkat. */
 class AnalyticsController extends Controller
 {
+    /** Menampilkan analitik berdasarkan periode hari, minggu, atau bulan. */
     public function index(Request $request): View
     {
         $period = $request->get('period', 'day');

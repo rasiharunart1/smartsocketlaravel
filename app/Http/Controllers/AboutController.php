@@ -9,8 +9,10 @@ use App\Models\TelemetryLog;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 
+/** Menampilkan ringkasan perangkat dan statistik aplikasi. */
 class AboutController extends Controller
 {
+    /** Menyusun data ringkas untuk halaman tentang sistem. */
     public function index(Request $request): View
     {
         $device = $request->user()->devices()->firstOrFail();

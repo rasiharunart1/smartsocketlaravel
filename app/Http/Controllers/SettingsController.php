@@ -11,15 +11,18 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 
+/** Mengelola pengaturan perangkat, MQTT, ambang, dan reset energi. */
 class SettingsController extends Controller
 {
     protected MqttService $mqttService;
 
+    /** Menyuntikkan layanan publish MQTT. */
     public function __construct(MqttService $mqttService)
     {
         $this->mqttService = $mqttService;
     }
 
+    /** Menampilkan pengaturan dan membuat perangkat awal bila belum ada. */
     public function index(Request $request): View
     {
         $device = $request->user()->devices()->with('threshold')->first();
@@ -50,6 +53,7 @@ class SettingsController extends Controller
         return view('settings', compact('device', 'threshold'));
     }
 
+    /** Menyimpan ambang/interval/tarif lalu mencoba menyinkronkannya ke ESP32. */
     public function update(UpdateDeviceSettingsRequest $request): RedirectResponse
     {
         $validated = $request->validated();
@@ -97,6 +101,7 @@ class SettingsController extends Controller
         return redirect()->route('settings')->with('status', $statusMsg);
     }
 
+    /** Menyimpan konfigurasi koneksi MQTT khusus perangkat. */
     public function updateMqtt(UpdateMqttSettingsRequest $request): RedirectResponse
     {
         $device = $request->user()->devices()->firstOrFail();

@@ -12,6 +12,7 @@ use Illuminate\Notifications\Notifiable;
 
 #[Fillable(['name', 'email', 'password'])]
 #[Hidden(['password', 'remember_token'])]
+/** Merepresentasikan pengguna aplikasi dan perangkat yang dimilikinya. */
 class User extends Authenticatable
 {
     /** @use HasFactory<UserFactory> */
@@ -30,6 +31,7 @@ class User extends Authenticatable
         ];
     }
 
+    /** Mengembalikan seluruh perangkat yang dimiliki pengguna. */
     public function devices(): \Illuminate\Database\Eloquent\Relations\HasMany
     {
         return $this->hasMany(Device::class);

@@ -1,0 +1,14 @@
+sequenceDiagram
+  participant U as Pengguna
+  participant UI as UI Dashboard
+  participant L as Laravel
+  participant B as Broker MQTT
+  participant E as ESP32
+  U->>UI: pilih ON atau OFF
+  UI->>L: POST /api/socket/toggle
+  L->>B: publish command/switch QoS 1
+  B->>E: payload JSON
+  E->>E: ubah relay jika tidak trip
+  E->>B: publish telemetry
+  B->>L: telemetry diterima daemon
+  L-->>UI: respons JSON awal

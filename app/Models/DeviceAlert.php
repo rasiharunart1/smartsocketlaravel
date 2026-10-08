@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
+/** Menyimpan alarm keselamatan yang diterima dari perangkat. */
 class DeviceAlert extends Model
 {
     use HasFactory;
@@ -29,11 +30,13 @@ class DeviceAlert extends Model
         ];
     }
 
+    /** Mengembalikan perangkat sumber alarm. */
     public function device(): BelongsTo
     {
         return $this->belongsTo(Device::class);
     }
 
+    /** Mengembalikan kanal soket terkait, bila ada. */
     public function socketChannel(): BelongsTo
     {
         return $this->belongsTo(SocketChannel::class);

@@ -18,6 +18,7 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
+/** Menjalankan daemon subscriber MQTT dan menyimpan pesan perangkat ke database. */
 class MqttListenCommand extends Command
 {
     /**
@@ -37,6 +38,7 @@ class MqttListenCommand extends Command
     /**
      * Execute the console command.
      */
+    /** Menghubungkan subscriber, memasang topik, dan mengulang koneksi ketika gagal. */
     public function handle(MqttService $mqttService): int
     {
         $this->info('Starting Smart Socket MQTT Daemon...');

@@ -8,8 +8,10 @@ use Illuminate\Http\Request;
 use Illuminate\View\View;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
+/** Menampilkan, mengekspor, dan mereset riwayat sensor milik pengguna. */
 class HistoryController extends Controller
 {
+    /** Menampilkan log sensor dengan batas tanggal opsional. */
     public function index(Request $request): View
     {
         $device = $request->user()->devices()->firstOrFail();
@@ -40,6 +42,7 @@ class HistoryController extends Controller
         return view('history', compact('logs', 'device', 'socketFilter', 'startDate', 'endDate', 'currentTemp', 'currentSmoke', 'threshold'));
     }
 
+    /** Mengalirkan log sensor yang difilter sebagai berkas CSV. */
     public function export(Request $request): StreamedResponse
     {
         $device = $request->user()->devices()->firstOrFail();
@@ -118,6 +121,7 @@ class HistoryController extends Controller
         }, 200, $headers);
     }
 
+    /** Menghapus seluruh riwayat log perangkat dan mencatat aktivitas reset. */
     public function reset(Request $request): \Illuminate\Http\RedirectResponse
     {
         $device = $request->user()->devices()->firstOrFail();

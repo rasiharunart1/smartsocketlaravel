@@ -1,0 +1,21 @@
+classDiagram
+  class User { +devices() }
+  class Device { +socketChannels() +threshold() +sensorLogs() +alerts() }
+  class SocketChannel { +telemetryLogs() }
+  class DeviceThreshold
+  class SensorLog { +total_power +total_energy }
+  class DeviceAlert
+  class ActivityLog
+  class DashboardController
+  class SettingsController
+  class MqttService { +publishSwitch() +publishThreshold() +publishReconnect() }
+  class MqttListenCommand { +handle() }
+  User "1" --> "0..*" Device
+  Device "1" --> "2" SocketChannel
+  Device "1" --> "0..1" DeviceThreshold
+  Device "1" --> "0..*" SensorLog
+  Device "1" --> "0..*" DeviceAlert
+  Device "1" --> "0..*" ActivityLog
+  DashboardController --> MqttService
+  SettingsController --> MqttService
+  MqttListenCommand --> MqttService

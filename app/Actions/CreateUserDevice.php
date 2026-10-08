@@ -6,8 +6,10 @@ use App\Models\Device;
 use App\Models\User;
 use Illuminate\Support\Str;
 
+/** Membuat perangkat, dua kanal soket, dan ambang awal untuk pengguna baru. */
 class CreateUserDevice
 {
+    /** Membuat UID unik beserta relasi awal perangkat pengguna. */
     public function handle(User $user): Device
     {
         do {

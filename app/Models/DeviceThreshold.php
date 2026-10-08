@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
+/** Menyimpan ambang keselamatan, tarif, dan interval perangkat. */
 class DeviceThreshold extends Model
 {
     use HasFactory;
@@ -34,6 +35,7 @@ class DeviceThreshold extends Model
         ];
     }
 
+    /** Mengembalikan perangkat pemilik ambang. */
     public function device(): BelongsTo
     {
         return $this->belongsTo(Device::class);

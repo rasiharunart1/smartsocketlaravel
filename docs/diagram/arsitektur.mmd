@@ -1,0 +1,9 @@
+flowchart LR
+  U[Pengguna] --> UI[UI Blade Laravel]
+  UI --> WEB[Server Laravel]
+  WEB --> DB[(Database)]
+  WEB <--> BROKER[Broker MQTT TLS]
+  BROKER <--> ESP[ESP32 Smart Socket]
+  ESP --> PZEM[2x PZEM-004T]
+  ESP --> ENV[DS18B20 dan MQ-2]
+  ESP --> RELAY[Relay 2 kanal dan LCD]

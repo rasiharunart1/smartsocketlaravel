@@ -1,0 +1,12 @@
+sequenceDiagram
+  participant E as ESP32
+  participant B as Broker MQTT
+  participant L as Daemon Laravel
+  participant D as Database
+  participant U as UI Dashboard
+  E->>B: publish telemetry (QoS 0)
+  B->>L: kirim topik telemetry
+  L->>D: perbarui perangkat dan simpan log sesuai interval
+  U->>L: GET /api/device/telemetry
+  L->>D: ambil log terbaru
+  L-->>U: JSON telemetri

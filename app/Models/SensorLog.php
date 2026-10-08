@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
+/** Menyimpan snapshot terpadu dua PZEM dan sensor lingkungan. */
 class SensorLog extends Model
 {
     use HasFactory;
@@ -47,6 +48,7 @@ class SensorLog extends Model
         'recorded_at' => 'datetime',
     ];
 
+    /** Mengembalikan perangkat sumber snapshot. */
     public function device(): BelongsTo
     {
         return $this->belongsTo(Device::class);

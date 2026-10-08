@@ -7,6 +7,7 @@ use App\Models\Device;
 use App\Models\DeviceAlert;
 use App\Models\SensorLog;
 
+/** Membentuk notifikasi UI dari alarm, status, telemetri, dan aktivitas perangkat. */
 class NotificationService
 {
     /**

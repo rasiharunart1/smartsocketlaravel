@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 
+/** Merepresentasikan satu kanal relay dan PZEM pada perangkat. */
 class SocketChannel extends Model
 {
     use HasFactory;
@@ -29,16 +30,19 @@ class SocketChannel extends Model
         ];
     }
 
+    /** Mengembalikan perangkat pemilik kanal. */
     public function device(): BelongsTo
     {
         return $this->belongsTo(Device::class);
     }
 
+    /** Mengembalikan log telemetri historis kanal. */
     public function telemetryLogs(): HasMany
     {
         return $this->hasMany(TelemetryLog::class);
     }
 
+    /** Mengembalikan telemetri paling baru dari kanal. */
     public function latestTelemetry(): HasOne
     {
         return $this->hasOne(TelemetryLog::class)->latestOfMany('recorded_at');

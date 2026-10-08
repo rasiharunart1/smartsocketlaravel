@@ -8,15 +8,18 @@ use Illuminate\Support\Facades\Log;
 use PhpMqtt\Client\ConnectionSettings;
 use PhpMqtt\Client\MqttClient;
 
+/** Mengelola koneksi dan publish MQTT untuk perangkat Smart Socket. */
 class MqttService
 {
     protected int $timeout;
 
+    /** Membaca batas waktu koneksi dari konfigurasi aplikasi. */
     public function __construct()
     {
         $this->timeout = (int) config('mqtt.timeout', 10);
     }
 
+    /** Membuat klien MQTT menggunakan konfigurasi perangkat atau konfigurasi global. */
     public function getClient(?string $clientId = null, ?Device $device = null): MqttClient
     {
         $host = $device?->mqtt_host ?: config('mqtt.host');
@@ -26,6 +29,7 @@ class MqttService
         return new MqttClient($host, $port, $id);
     }
 
+    /** Membentuk pengaturan autentikasi, keep-alive, dan TLS MQTT. */
     public function getConnectionSettings(?Device $device = null): ConnectionSettings
     {
         $username = $device?->mqtt_username ?: config('mqtt.username', '');
@@ -54,6 +58,7 @@ class MqttService
         return $settings;
     }
 
+    /** Menerbitkan payload JSON dan mengembalikan status keberhasilan publish. */
     public function publish(Device $device, string $topic, array $payload, int $qos = 1, bool $retain = false): bool
     {
         $host = $device->mqtt_host ?: config('mqtt.host');
@@ -83,6 +88,7 @@ class MqttService
         }
     }
 
+    /** Mengirim perintah perubahan relay untuk satu kanal soket. */
     public function publishSwitch(Device $device, int $socketNumber, bool $turnOn, ?string $requestedBy = null): bool
     {
         $topic = "smartsocket/{$device->device_uid}/command/switch";
@@ -96,6 +102,7 @@ class MqttService
         return $this->publish($device, $topic, $payload, 1, false);
     }
 
+    /** Mengirim status dua relay sebagai sinkronisasi awal perangkat. */
     public function publishSwitchSync(Device $device): bool
     {
         $channel1 = $device->socketChannels()->where('channel_number', 1)->first();
@@ -111,6 +118,7 @@ class MqttService
         return $this->publish($device, $topicSync, $payloadSync, 1, false);
     }
 
+    /** Mengirim ambang keselamatan dan interval telemetri ke perangkat. */
     public function publishThreshold(Device $device, array $thresholds): bool
     {
         $topic = "smartsocket/{$device->device_uid}/command/threshold";
@@ -127,6 +135,7 @@ class MqttService
         return $this->publish($device, $topic, $payload, 1, true);
     }
 
+    /** Meminta firmware menghubungkan kembali WiFi. */
     public function publishReconnect(Device $device): bool
     {
         $topic = "smartsocket/{$device->device_uid}/command/reconnect";
@@ -139,7 +148,7 @@ class MqttService
     }
 
     /**
-     * Publish perintah reset energi (kWh) ke PZEM-004T melalui ESP32.
+     * Mengirim perintah reset energi (kWh) ke PZEM-004T melalui ESP32.
      *
      * @param  Device  $device
      * @param  int  $socketNumber  1 = PZEM-1, 2 = PZEM-2, 0 = keduanya

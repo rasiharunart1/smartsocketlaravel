@@ -1,0 +1,16 @@
+erDiagram
+  USERS ||--o{ DEVICES : memiliki
+  DEVICES ||--|{ SOCKET_CHANNELS : menyediakan
+  DEVICES ||--o| DEVICE_THRESHOLDS : memiliki
+  DEVICES ||--o{ SENSOR_LOGS : mencatat
+  DEVICES ||--o{ ENVIRONMENTAL_LOGS : mencatat
+  DEVICES ||--o{ DEVICE_ALERTS : menghasilkan
+  DEVICES ||--o{ ACTIVITY_LOGS : mencatat
+  SOCKET_CHANNELS ||--o{ TELEMETRY_LOGS : mencatat
+  SOCKET_CHANNELS ||--o{ DEVICE_ALERTS : terkait
+  USERS { bigint id PK string email }
+  DEVICES { bigint id PK bigint user_id FK string device_uid UK string status }
+  SOCKET_CHANNELS { bigint id PK bigint device_id FK int channel_number bool is_active string status }
+  DEVICE_THRESHOLDS { bigint id PK bigint device_id FK decimal max_voltage decimal max_current int device_interval }
+  SENSOR_LOGS { bigint id PK bigint device_id FK decimal voltage_1 decimal voltage_2 decimal temperature datetime recorded_at }
+  DEVICE_ALERTS { bigint id PK bigint device_id FK bigint socket_channel_id FK string alert_type bool is_resolved }

@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
+/** Menyimpan log suhu dan asap historis perangkat. */
 class EnvironmentalLog extends Model
 {
     use HasFactory;
@@ -26,6 +27,7 @@ class EnvironmentalLog extends Model
         ];
     }
 
+    /** Mengembalikan perangkat sumber log lingkungan. */
     public function device(): BelongsTo
     {
         return $this->belongsTo(Device::class);

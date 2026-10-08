@@ -1,0 +1,14 @@
+flowchart TD
+  A[setup] --> B[Muat relay dan ambang dari NVS]
+  B --> C[Inisialisasi pin, sensor, LCD, WiFi, MQTT]
+  C --> D[loop]
+  D --> E{WiFi terhubung?}
+  E -- Tidak --> F[Coba ulang tiap 10 detik]
+  F --> D
+  E -- Ya --> G{MQTT terhubung?}
+  G -- Tidak --> H[Hubungkan ulang tiap 5 detik]
+  H --> D
+  G -- Ya --> I[Proses pesan MQTT]
+  I --> J[Baca sensor dan evaluasi tiap 1 detik]
+  J --> K[Kirim telemetri, status, dan LCD sesuai interval]
+  K --> D

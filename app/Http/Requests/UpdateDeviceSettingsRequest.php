@@ -5,6 +5,7 @@ namespace App\Http\Requests;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 
+/** Memvalidasi ambang keselamatan, tarif, dan interval perangkat. */
 class UpdateDeviceSettingsRequest extends FormRequest
 {
     /**

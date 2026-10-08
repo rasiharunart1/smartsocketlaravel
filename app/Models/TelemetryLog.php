@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
+/** Menyimpan telemetri historis per kanal soket. */
 class TelemetryLog extends Model
 {
     use HasFactory;
@@ -34,6 +35,7 @@ class TelemetryLog extends Model
         ];
     }
 
+    /** Mengembalikan kanal soket sumber telemetri. */
     public function socketChannel(): BelongsTo
     {
         return $this->belongsTo(SocketChannel::class);

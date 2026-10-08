@@ -5,6 +5,7 @@ namespace App\Http\Requests;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 
+/** Memvalidasi konfigurasi koneksi MQTT milik perangkat. */
 class UpdateMqttSettingsRequest extends FormRequest
 {
     protected function prepareForValidation(): void

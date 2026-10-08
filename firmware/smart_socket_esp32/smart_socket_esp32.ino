@@ -212,6 +212,7 @@ void saveThresholds();
 // ============================================================================
 //  SETUP
 // ============================================================================
+/** Menyiapkan hardware, state NVS, jaringan, topik, dan klien MQTT. */
 void setup() {
     Serial.begin(115200);
     delay(250);
@@ -315,6 +316,7 @@ void setup() {
 // ============================================================================
 //  LOOP
 // ============================================================================
+/** Menjalankan tugas berkala non-blocking untuk koneksi, sensor, telemetri, dan LCD. */
 void loop() {
     unsigned long now = millis();
 
@@ -347,6 +349,7 @@ void loop() {
 // ============================================================================
 //  PEMELIHARAAN KONEKSI (WIFI & MQTT NON-BLOCKING)
 // ============================================================================
+/** Mempertahankan koneksi WiFi/MQTT dengan interval retry tanpa memblokir loop. */
 void checkWifiAndMqtt(unsigned long now) {
     // A. Periksa WiFi
     if (WiFi.status() != WL_CONNECTED) {
@@ -370,6 +373,7 @@ void checkWifiAndMqtt(unsigned long now) {
     }
 }
 
+/** Menghubungkan broker, memasang LWT, lalu subscribe seluruh topik perintah. */
 void connectMqtt() {
     // Generate Client ID unik berbasis MAC Address untuk mencegah disconnect collision di broker
     String uniqueClientId = String(MQTT_CLIENT_ID) + "_" + DEVICE_UID + "_" + String((uint32_t)ESP.getEfuseMac(), HEX);
@@ -569,6 +573,7 @@ void updateLcd(unsigned long now) {
 // ============================================================================
 //  CALLBACK & HANDLER PERINTAH MQTT
 // ============================================================================
+/** Mengurai payload JSON MQTT dan meneruskan ke handler perintah yang sesuai. */
 void mqttCallback(char* topic, byte* payload, unsigned int length) {
     String topicStr = String(topic);
     String payloadStr;
@@ -761,6 +766,7 @@ float sanitizeReading(float value) {
     return (isnan(value) || isinf(value) || value < 0.0f) ? 0.0f : value;
 }
 
+/** Membaca PZEM, suhu, dan asap ke snapshot telemetri terbaru. */
 void readAllSensors() {
     // 1. Baca sensor PZEM 1 (Soket 1)
     // Optimasi: jika voltage gagal / 0, skip metrik lainnya agar tidak kena serial delay
@@ -810,6 +816,7 @@ void readAllSensors() {
 // ============================================================================
 //  PUBLISH TELEMETRI
 // ============================================================================
+/** Menerbitkan snapshot sensor dan status relay ke topik telemetri. */
 void publishTelemetry() {
     // Buat payload JSON sesuai format baku backend Laravel (kompatibel ArduinoJson v6 & v7)
     ALLOC_JSON_DOC(doc, 1024);
@@ -850,6 +857,7 @@ void publishTelemetry() {
 // ============================================================================
 //  EVALUASI THRESHOLD & ALERT (DENGAN FLOOD PROTECTION & TRIP GRANULAR)
 // ============================================================================
+/** Mengevaluasi ambang keselamatan dan memutus relay bila kondisi berbahaya. */
 void evaluateThresholds() {
     float v1    = latestSensor.voltage1;
     float v2    = latestSensor.voltage2;

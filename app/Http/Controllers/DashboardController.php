@@ -15,15 +15,18 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 
+/** Menyediakan dashboard, kontrol soket, telemetri, dan notifikasi perangkat. */
 class DashboardController extends Controller
 {
     protected MqttService $mqttService;
 
+    /** Menyuntikkan layanan publish MQTT. */
     public function __construct(MqttService $mqttService)
     {
         $this->mqttService = $mqttService;
     }
 
+    /** Menampilkan dashboard dengan data perangkat terbaru milik pengguna. */
     public function index(Request $request): View
     {
         $device = $request->user()->devices()->firstOrFail();
@@ -97,6 +100,7 @@ class DashboardController extends Controller
         ));
     }
 
+    /** Memvalidasi perubahan relay, menerbitkan perintah, dan mencatat aktivitas. */
     public function toggle(Request $request): JsonResponse
     {
         $validated = $request->validate([
@@ -147,6 +151,7 @@ class DashboardController extends Controller
         ]);
     }
 
+    /** Mengirim perintah rekoneksi WiFi ke perangkat pengguna. */
     public function reconnect(Request $request): JsonResponse
     {
         $device = $request->user()->devices()->firstOrFail();
@@ -171,6 +176,7 @@ class DashboardController extends Controller
         ]);
     }
 
+    /** Mengembalikan snapshot telemetri terbaru dalam JSON untuk UI. */
     public function telemetry(Request $request): JsonResponse
     {
         $device = $request->user()->devices()->firstOrFail();
@@ -266,6 +272,7 @@ class DashboardController extends Controller
         ]);
     }
 
+    /** Mengembalikan daftar notifikasi yang dibentuk dari data perangkat. */
     public function notifications(Request $request): JsonResponse
     {
         $device = $request->user()->devices()->first();
@@ -279,6 +286,7 @@ class DashboardController extends Controller
         ]);
     }
 
+    /** Menandai seluruh alarm aktif perangkat sebagai selesai. */
     public function resolveAllAlerts(Request $request): JsonResponse
     {
         $device = $request->user()->devices()->firstOrFail();

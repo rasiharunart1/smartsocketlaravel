@@ -1,0 +1,8 @@
+stateDiagram-v2
+  [*] --> Mati
+  Mati --> Menyala: perintah ON
+  Menyala --> Mati: perintah OFF
+  Menyala --> TerkunciTrip: ambang terlampaui
+  Mati --> TerkunciTrip: ambang terlampaui
+  TerkunciTrip --> Mati: lingkungan normal
+  TerkunciTrip --> TerkunciTrip: perintah ON ditolak

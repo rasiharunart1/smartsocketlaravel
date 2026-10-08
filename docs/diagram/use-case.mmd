@@ -1,0 +1,11 @@
+flowchart LR
+  A[Pengguna terautentikasi] --> D[Melihat dashboard dan telemetri]
+  A --> S[Mengendalikan soket]
+  A --> R[Meminta rekoneksi WiFi]
+  A --> N[Melihat atau menyelesaikan notifikasi]
+  A --> H[Melihat, ekspor, atau reset riwayat]
+  A --> G[Mengatur ambang, interval, tarif, MQTT]
+  A --> AN[Melihat analitik]
+  A --> P[Mengelola profil]
+  B[ESP32] --> T[Mengirim telemetri, status, dan alarm]
+  B --> C[Menerima perintah MQTT]

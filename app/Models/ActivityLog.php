@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
+/** Menyimpan jejak aktivitas pengguna atau sistem pada perangkat. */
 class ActivityLog extends Model
 {
     use HasFactory;
@@ -17,6 +18,7 @@ class ActivityLog extends Model
         'description',
     ];
 
+    /** Mengembalikan perangkat yang terkait dengan aktivitas. */
     public function device(): BelongsTo
     {
         return $this->belongsTo(Device::class);
