@@ -4,6 +4,7 @@ flowchart LR
   WEB --> DB[(Database)]
   WEB <--> BROKER[Broker MQTT TLS]
   BROKER <--> ESP[ESP32 Smart Socket]
+  P[Browser portal lokal] --> ESP
   ESP --> PZEM[2x PZEM-004T]
   ESP --> ENV[DS18B20 dan MQ-2]
   ESP --> RELAY[Relay 2 kanal dan LCD]

@@ -20,3 +20,9 @@ Isi kolom hasil aktual, status, dan bukti saat pengujian dilakukan.
 | 14 | Riwayat dan ekspor | Filter tanggal lalu ekspor | CSV sesuai rentang tanggal |  |  |  |
 | 15 | Reset riwayat | Kirim POST reset | Log perangkat dihapus dan aktivitas dicatat |  |  |  |
 | 16 | Notifikasi | Alarm belum selesai lalu resolve-all | Hitungan notifikasi berubah menjadi selesai |  |  |  |
+| 17 | Portal konfigurasi | Buka IP ESP32 pada port 80 dan autentikasi | Halaman pengaturan perangkat tampil |  |  |  |
+| 18 | Simpan portal | Isi SSID, MQTT, UID, dan port valid | Konfigurasi masuk NVS lalu ESP32 restart |  |  |  |
+| 19 | Validasi portal | Kosongkan SSID/host/UID atau isi port di luar 1-65535 | Portal menolak penyimpanan |  |  |  |
+| 20 | AP setup saat boot | Nyalakan tanpa konfigurasi WiFi | AP setup dan captive portal aktif |  |  |  |
+| 21 | BOOT paksa AP | Tahan BOOT minimal 3 detik saat power-on | AP setup aktif meski konfigurasi WiFi ada |  |  |  |
+| 22 | AP setup saat putus | Putuskan WiFi lebih dari 2 menit | AP setup aktif |  |  |  |

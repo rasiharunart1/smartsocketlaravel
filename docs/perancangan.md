@@ -11,6 +11,7 @@ flowchart LR
   WEB --> DB[(Database)]
   WEB <--> BROKER[Broker MQTT TLS]
   BROKER <--> ESP[ESP32 Smart Socket]
+  P[Browser portal lokal] --> ESP
   ESP --> PZEM[2x PZEM-004T]
   ESP --> ENV[DS18B20 dan MQ-2]
   ESP --> RELAY[Relay 2 kanal dan LCD]
@@ -119,19 +120,22 @@ sequenceDiagram
 
 ```mermaid
 flowchart TD
-  A[setup] --> B[Muat relay dan ambang dari NVS]
-  B --> C[Inisialisasi pin, sensor, LCD, WiFi, MQTT]
-  C --> D[loop]
-  D --> E{WiFi terhubung?}
-  E -- Tidak --> F[Coba ulang tiap 10 detik]
-  F --> D
-  E -- Ya --> G{MQTT terhubung?}
-  G -- Tidak --> H[Hubungkan ulang tiap 5 detik]
-  H --> D
-  G -- Ya --> I[Proses pesan MQTT]
-  I --> J[Baca sensor dan evaluasi tiap 1 detik]
-  J --> K[Kirim telemetri, status, dan LCD sesuai interval]
-  K --> D
+  A[setup] --> B[Muat konfigurasi portal, relay, dan ambang dari NVS]
+  B --> C[Inisialisasi pin, sensor, LCD, WiFi, MQTT, portal]
+  C --> D{WiFi tersedia?}
+  D -- Tidak atau BOOT 3 detik --> E[Aktifkan AP setup]
+  D -- Ya --> F[Mode station]
+  E --> G[loop]
+  F --> G
+  G --> H[Layani portal web lokal]
+  H --> I{WiFi terhubung?}
+  I -- Tidak --> J[Coba ulang tiap 10 detik; AP setelah 2 menit]
+  J --> G
+  I -- Ya --> K{MQTT terhubung?}
+  K -- Tidak --> L[Hubungkan ulang tiap 5 detik]
+  L --> G
+  K -- Ya --> M[Baca sensor, proses MQTT, kirim data, LCD]
+  M --> G
 ```
 
 ## State relay

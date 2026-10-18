@@ -9,7 +9,7 @@ Smart Socket memantau dua soket listrik dan kondisi enclosure, menampilkan data 
 | Lapisan | Implementasi berdasarkan kode |
 |---|---|
 | Hardware | ESP32, 2 relay, 2 PZEM-004T v3.0, DS18B20, MQ-2, LCD I2C 16x2 |
-| Firmware | Arduino/PlatformIO; membaca sensor, mengatur relay, menyimpan state/ambang di NVS, MQTT TLS |
+| Firmware | Arduino/PlatformIO v2.6.0; membaca sensor, mengatur relay, menyimpan state/ambang serta konfigurasi portal di NVS, MQTT TLS |
 | Backend | Laravel 13, `MqttService`, perintah `mqtt:listen` |
 | Database | Tabel perangkat, kanal soket, ambang, log sensor/telemetri/lingkungan, alarm, aktivitas |
 | UI | Blade: dashboard, analytics, history, settings, about, profil, dan autentikasi |
@@ -22,5 +22,6 @@ Smart Socket memantau dua soket listrik dan kondisi enclosure, menampilkan data 
 4. Daemon `php artisan mqtt:listen` menerima pesan, memperbarui status perangkat, lalu menyimpan log berdasarkan `log_interval` (minimum 3 detik) atau saat relay/alarm berubah.
 5. Dashboard meminta telemetri terbaru melalui endpoint Laravel dan menampilkannya kepada pengguna.
 6. Saat pengguna mengubah soket atau pengaturan, Laravel menerbitkan perintah MQTT; ESP32 memprosesnya lalu menerbitkan telemetri terbaru.
+7. Konfigurasi awal perangkat dilakukan melalui portal web lokal ESP32. Portal dapat membuka mode AP ketika WiFi belum dikonfigurasi/gagal terhubung, WiFi putus lebih dari dua menit, atau tombol BOOT ditahan tiga detik saat perangkat dinyalakan.
 
 Detail rancangan ada di [perancangan.md](perancangan.md), kontrak implementasi di [implementasi-laravel.md](implementasi-laravel.md) dan [implementasi-firmware.md](implementasi-firmware.md).
