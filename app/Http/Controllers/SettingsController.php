@@ -29,7 +29,7 @@ class SettingsController extends Controller
 
         if (! $device) {
             $device = $request->user()->devices()->create([
-                'device_uid' => 'ESP32_SOCKET_01',
+                'device_uid' => config('mqtt.default_device_uid', 'SS-EPJPJV0Q8DOM'),
                 'name' => 'Smart Socket',
                 'status' => 'offline',
                 'wifi_rssi' => 0,
